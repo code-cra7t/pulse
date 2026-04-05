@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "698582903261",
+    "project_id": "pulsenotes-c8d82",
+    "storage_bucket": "pulsenotes-c8d82.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:698582903261:android:9521a9b427653aff15ee34",
+        "android_client_info": {
+          "package_name": "com.example.pulse_notes"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDx46OodJE18R-TFtroAEf0AY-hlLvMzes"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:698582903261:android:b3204d8a0156628e15ee34",
+        "android_client_info": {
+          "package_name": "com.tori.pulse"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDx46OodJE18R-TFtroAEf0AY-hlLvMzes"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
