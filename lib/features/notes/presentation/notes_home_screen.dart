@@ -412,17 +412,7 @@ class _NoteCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: _NoteColorBadge(tag: noteTag)),
-                            const SizedBox(width: AppSpacing.sm),
-                            Text(
-                              TimestampFormatter.format(displayTimestamp),
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
+                        _NoteColorBadge(tag: noteTag),
                         const SizedBox(height: AppSpacing.xs),
                         if (note.isPinned) ...[
                           Text(
@@ -510,9 +500,28 @@ class _NoteCard extends StatelessWidget {
                   images: note.images,
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                Text(
-                  '${note.images.length} image(s) attached',
-                  style: Theme.of(context).textTheme.bodySmall,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${note.images.length} image(s) attached',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    Text(
+                      TimestampFormatter.format(displayTimestamp),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ] else ...[
+                const SizedBox(height: AppSpacing.xs),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    TimestampFormatter.format(displayTimestamp),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
               ],
             ],
@@ -1132,17 +1141,20 @@ class _NoteColorBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: tag.accent.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        tag.label,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: tag.accent,
-          fontWeight: FontWeight.w700,
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: tag.accent.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          tag.label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: tag.accent,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
