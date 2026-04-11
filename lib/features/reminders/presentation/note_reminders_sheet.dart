@@ -254,10 +254,7 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
 
   Future<void> _deleteReminder(Reminder reminder) async {
     try {
-      await ref.read(remindersServiceProvider).deleteReminder(
-            reminder.id,
-            reminder.notificationId,
-          );
+      await ref.read(remindersServiceProvider).deleteReminder(reminder);
       if (mounted) {
         _showMessage('Reminder deleted.');
       }

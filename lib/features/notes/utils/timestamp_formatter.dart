@@ -12,7 +12,7 @@ class TimestampFormatter {
       return '${difference.inHours}h ago';
     }
 
-    return _monthLabel(value.month) + ' ${value.day}';
+    return '${_monthLabel(value.month)} ${value.day}';
   }
 
   static String _monthLabel(int month) {

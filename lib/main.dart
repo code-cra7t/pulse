@@ -11,6 +11,9 @@ import 'features/auth/presentation/auth_gate.dart';
 import 'features/reminders/providers/reminders_providers.dart';
 import 'firebase_options.dart';
 
+final FlutterLocalNotificationsPlugin notificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -18,7 +21,6 @@ Future<void> main() async {
     persistenceEnabled: true,
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
-  final notificationsPlugin = FlutterLocalNotificationsPlugin();
   final notificationsService = LocalNotificationsService(notificationsPlugin);
   await notificationsService.initialize();
 
@@ -49,7 +51,7 @@ class PulseNotesApp extends StatelessWidget {
       builder: (context, child) {
         return Stack(
           children: [
-            if (child != null) child,
+            child ?? const SizedBox.shrink(),
             const OfflineStatusIndicator(),
           ],
         );

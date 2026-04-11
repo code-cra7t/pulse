@@ -12,6 +12,7 @@ import '../../../core/services/firebase_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../reminders/data/smart_reminder_parser.dart';
 import '../../reminders/models/parsed_reminder.dart';
+import '../../reminders/models/reminder.dart';
 import '../../reminders/models/repeat_type.dart';
 import '../../reminders/presentation/note_reminders_sheet.dart';
 import '../../reminders/providers/reminders_providers.dart';
@@ -108,7 +109,31 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
         actions: [
           IconButton(
             onPressed: () async {
-              await ref.read(authServiceProvider).signOut();
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (context) {
+                  return AlertDialog(
+                    title: const Text('Log out?'),
+                    content: const Text(
+                      'Are you sure you want to log out?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text('Logout'),
+                      ),
+                    ],
+                  );
+                },
+              );
+
+              if (confirmed == true) {
+                await ref.read(authServiceProvider).signOut();
+              }
             },
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
@@ -200,7 +225,9 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
                                   },
                             onTogglePin: () => _togglePin(note),
                             onManageReminders: () => _openReminders(context, note),
-                            onToggleTask: (task) => _toggleTask(note, task),
+                            onToggleTask: (task, isCompleted) =>
+                                _setTaskCompletion(note, task, isCompleted),
+                            onDeleteTask: (task) => _deleteTask(note, task),
                             onDelete: () => _deleteNote(context, note.id),
                           );
                         }, childCount: math.max(0, notes.length * 2 - 1)),
@@ -285,8 +312,23 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
     );
   }
 
-  Future<void> _toggleTask(Note note, NoteTask task) async {
-    final updatedContent = TaskParser.toggleTask(note.content, task.lineIndex);
+  Future<void> _setTaskCompletion(
+    Note note,
+    NoteTask task,
+    bool isCompleted,
+  ) async {
+    final updatedContent = TaskParser.setTaskCompletion(
+      note.content,
+      task.lineIndex,
+      isCompleted,
+    );
+    await ref.read(notesServiceProvider).updateNote(
+          note.copyWith(content: updatedContent),
+        );
+  }
+
+  Future<void> _deleteTask(Note note, NoteTask task) async {
+    final updatedContent = TaskParser.deleteTask(note.content, task.lineIndex);
     await ref.read(notesServiceProvider).updateNote(
           note.copyWith(content: updatedContent),
         );
@@ -355,7 +397,7 @@ class _EmptyNotesState extends StatelessWidget {
   }
 }
 
-class _NoteCard extends StatelessWidget {
+class _NoteCard extends ConsumerWidget {
   const _NoteCard({
     required this.note,
     required this.isHighlighted,
@@ -363,6 +405,7 @@ class _NoteCard extends StatelessWidget {
     required this.onTogglePin,
     required this.onManageReminders,
     required this.onToggleTask,
+    required this.onDeleteTask,
     required this.onDelete,
   });
 
@@ -371,20 +414,27 @@ class _NoteCard extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback onTogglePin;
   final VoidCallback onManageReminders;
-  final ValueChanged<NoteTask> onToggleTask;
+  final Future<void> Function(NoteTask task, bool isCompleted) onToggleTask;
+  final Future<void> Function(NoteTask task) onDeleteTask;
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final noteColor = Color(note.color);
     final noteTag = NoteColorTag.fromColor(note.color);
     final title = note.title?.trim();
     final hasTitle = title != null && title.isNotEmpty;
     final tasks = TaskParser.extractTasks(note.content);
+    final taskSuggestions = TaskParser.extractTaskReminderSuggestions(
+      note.content,
+      SmartReminderParser(),
+    );
     final plainText = TaskParser.extractPlainTextLines(note.content).join('\n');
     final displayTimestamp = note.updatedAt == note.createdAt
         ? note.createdAt
         : note.updatedAt;
+    final reminders = ref.watch(noteRemindersStreamProvider(note.id)).asData?.value ??
+        const [];
     return RepaintBoundary(
       child: Card(
       shape: RoundedRectangleBorder(
@@ -476,22 +526,14 @@ class _NoteCard extends StatelessWidget {
               ],
               if (tasks.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.xs),
-                ...tasks.map((task) {
-                  return CheckboxListTile(
-                    value: task.isCompleted,
-                    onChanged: (_) => onToggleTask(task),
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: Text(
-                      task.text.isEmpty ? 'Untitled task' : task.text,
-                      style: TextStyle(
-                        decoration: task.isCompleted
-                            ? TextDecoration.lineThrough
-                            : TextDecoration.none,
-                      ),
-                    ),
-                  );
-                }),
+                _TaskListView(
+                  note: note,
+                  tasks: tasks,
+                  taskSuggestions: taskSuggestions,
+                  reminders: reminders,
+                  onToggleTask: onToggleTask,
+                  onDeleteTask: onDeleteTask,
+                ),
               ],
               if (note.images.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.sm),
@@ -592,9 +634,12 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
   late final TextEditingController _contentController;
   late List<String> _imageUrls;
   late int _selectedColor;
+  String? _workingNoteId;
+  DateTime? _workingCreatedAt;
   bool _isSaving = false;
   bool _isUploadingImage = false;
   bool _isCreatingSmartReminder = false;
+  bool _isAutoFormattingContent = false;
   String? _dismissedSuggestionKey;
 
   @override
@@ -608,6 +653,8 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     );
     _imageUrls = List<String>.from(widget.note?.images ?? const []);
     _selectedColor = widget.note?.color ?? _noteColors.first;
+    _workingNoteId = widget.note?.id;
+    _workingCreatedAt = widget.note?.createdAt;
   }
 
   @override
@@ -636,16 +683,18 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     try {
       final notesService = ref.read(notesServiceProvider);
 
-      if (widget.note == null) {
-        await notesService.createNote(
+      if (_workingNoteId == null) {
+        final createdNote = await notesService.createNote(
           userId: widget.userId,
           title: title,
           content: content,
           color: _selectedColor,
           images: _imageUrls,
         );
+        _workingNoteId = createdNote.id;
+        _workingCreatedAt = createdNote.createdAt;
       } else {
-        final updatedNote = widget.note!.copyWith(
+        final updatedNote = _currentNoteSnapshot().copyWith(
           title: title,
           content: content,
           color: _selectedColor,
@@ -800,6 +849,10 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                       const SizedBox(height: AppSpacing.sm),
                       _EditorTaskPreview(
                         tasks: TaskParser.extractTasks(_contentController.text),
+                        taskSuggestions: TaskParser.extractTaskReminderSuggestions(
+                          _contentController.text,
+                          _smartReminderParser,
+                        ),
                         onToggleTask: (task) {
                           setState(() {
                             _contentController.text = TaskParser.toggleTask(
@@ -929,6 +982,31 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
   }
 
   void _handleContentChanged(String value) {
+    if (_isAutoFormattingContent) {
+      return;
+    }
+
+    final formattedValue = _autoFormatTaskPrefix(value);
+    if (formattedValue != value) {
+      final selection = _contentController.selection;
+      final baseOffset = selection.baseOffset;
+      final extentOffset = selection.extentOffset;
+      final updatedBaseOffset = baseOffset >= 0 ? baseOffset + 1 : baseOffset;
+      final updatedExtentOffset =
+          extentOffset >= 0 ? extentOffset + 1 : extentOffset;
+
+      _isAutoFormattingContent = true;
+      _contentController.value = TextEditingValue(
+        text: formattedValue,
+        selection: TextSelection(
+          baseOffset: updatedBaseOffset,
+          extentOffset: updatedExtentOffset,
+        ),
+      );
+      _isAutoFormattingContent = false;
+      value = formattedValue;
+    }
+
     final parsed = _smartReminderParser.parse(value);
     final currentKey = parsed == null ? null : _suggestionKey(parsed);
 
@@ -940,11 +1018,33 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     });
   }
 
-  ParsedReminder? _currentSuggestion() {
-    if (widget.note == null) {
-      return null;
+  String _autoFormatTaskPrefix(String value) {
+    final selection = _contentController.selection;
+    if (!selection.isCollapsed || selection.baseOffset < 0) {
+      return value;
     }
 
+    final cursorOffset = selection.baseOffset;
+    if (cursorOffset == 0 || cursorOffset > value.length) {
+      return value;
+    }
+
+    if (value[cursorOffset - 1] != '-') {
+      return value;
+    }
+
+    final lineStart = value.lastIndexOf('\n', cursorOffset - 1) + 1;
+    final beforeDash = value.substring(lineStart, cursorOffset - 1);
+    final afterDash = value.substring(cursorOffset);
+
+    if (beforeDash.trim().isNotEmpty || afterDash.startsWith(' ')) {
+      return value;
+    }
+
+    return '${value.substring(0, cursorOffset)} ${value.substring(cursorOffset)}';
+  }
+
+  ParsedReminder? _currentSuggestion() {
     final parsed = _smartReminderParser.parse(_contentController.text);
     if (parsed == null) {
       return null;
@@ -959,9 +1059,8 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
   }
 
   Future<void> _createSmartReminder() async {
-    final note = widget.note;
     final parsed = _currentSuggestion();
-    if (note == null || parsed == null || _isCreatingSmartReminder) {
+    if (parsed == null || _isCreatingSmartReminder) {
       return;
     }
 
@@ -970,10 +1069,18 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     });
 
     try {
+      final note = await _ensureWorkingNote();
       await ref.read(remindersServiceProvider).createReminder(
             userId: widget.userId,
             noteId: note.id,
-            notePreview: _notePreview(note.copyWith(content: _contentController.text)),
+            notePreview: _notePreview(
+              note.copyWith(
+                title: _normalizeTitle(_titleController.text),
+                content: _contentController.text.trim(),
+                color: _selectedColor,
+                images: _imageUrls,
+              ),
+            ),
             scheduledAt: parsed.dateTime,
             repeat: RepeatType.none,
             notificationId: DateTime.now()
@@ -1014,53 +1121,480 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     );
     return '$date at $time';
   }
+
+  Note _currentNoteSnapshot() {
+    return Note(
+      id: _workingNoteId ?? widget.note?.id ?? '',
+      userId: widget.userId,
+      title: _normalizeTitle(_titleController.text),
+      isPinned: widget.note?.isPinned ?? false,
+      createdAt: _workingCreatedAt ?? widget.note?.createdAt ?? DateTime.now(),
+      updatedAt: widget.note?.updatedAt ?? DateTime.now(),
+      tags: widget.note?.tags ?? const <String>[],
+      content: _contentController.text.trim(),
+      color: _selectedColor,
+      images: _imageUrls,
+    );
+  }
+
+  Future<Note> _ensureWorkingNote() async {
+    final existingId = _workingNoteId;
+    if (existingId != null && existingId.isNotEmpty) {
+      return _currentNoteSnapshot().copyWith(id: existingId);
+    }
+
+    final createdNote = await ref.read(notesServiceProvider).createNote(
+          userId: widget.userId,
+          title: _normalizeTitle(_titleController.text),
+          content: _contentController.text.trim(),
+          color: _selectedColor,
+          images: _imageUrls,
+        );
+
+    if (mounted) {
+      setState(() {
+        _workingNoteId = createdNote.id;
+        _workingCreatedAt = createdNote.createdAt;
+      });
+    } else {
+      _workingNoteId = createdNote.id;
+      _workingCreatedAt = createdNote.createdAt;
+    }
+
+    return createdNote;
+  }
 }
 
 class _EditorTaskPreview extends StatelessWidget {
   const _EditorTaskPreview({
     required this.tasks,
+    required this.taskSuggestions,
     required this.onToggleTask,
   });
 
   final List<NoteTask> tasks;
+  final List<TaskReminderSuggestion> taskSuggestions;
   final ValueChanged<NoteTask> onToggleTask;
 
   @override
   Widget build(BuildContext context) {
     if (tasks.isEmpty) {
       return Text(
-        'Tasks appear automatically when a line starts with - [ ] or - [x].',
+        'Tasks appear automatically when a line starts with - .',
         style: Theme.of(context).textTheme.bodyMedium,
       );
     }
+
+    final activeTasks = tasks.where((task) => !task.isCompleted).toList();
+    final completedTasks = tasks.where((task) => task.isCompleted).toList();
+    final suggestionsByLine = {
+      for (final suggestion in taskSuggestions)
+        suggestion.task.lineIndex: suggestion.reminder,
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-        'Detected tasks',
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
+          'Detected tasks',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
         const SizedBox(height: AppSpacing.xs),
-        ...tasks.map((task) {
-          return CheckboxListTile(
-            value: task.isCompleted,
-            onChanged: (_) => onToggleTask(task),
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              task.text.isEmpty ? 'Untitled task' : task.text,
-              style: TextStyle(
-                decoration: task.isCompleted
-                    ? TextDecoration.lineThrough
-                    : TextDecoration.none,
-              ),
-            ),
+        if (activeTasks.isNotEmpty) ...activeTasks.map((task) {
+          return _TaskRow(
+            task: task,
+            onToggle: () => onToggleTask(task),
+            suggestion: suggestionsByLine[task.lineIndex],
           );
         }),
+        if (completedTasks.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Completed',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          ...completedTasks.map((task) {
+            return _TaskRow(
+              task: task,
+              onToggle: () => onToggleTask(task),
+              suggestion: suggestionsByLine[task.lineIndex],
+            );
+          }),
+        ],
       ],
     );
   }
+}
+
+class _TaskListView extends ConsumerStatefulWidget {
+  const _TaskListView({
+    required this.note,
+    required this.tasks,
+    required this.taskSuggestions,
+    required this.reminders,
+    required this.onToggleTask,
+    required this.onDeleteTask,
+  });
+
+  final Note note;
+  final List<NoteTask> tasks;
+  final List<TaskReminderSuggestion> taskSuggestions;
+  final List<Reminder> reminders;
+  final Future<void> Function(NoteTask task, bool isCompleted) onToggleTask;
+  final Future<void> Function(NoteTask task) onDeleteTask;
+
+  @override
+  ConsumerState<_TaskListView> createState() => _TaskListViewState();
+}
+
+class _TaskListViewState extends ConsumerState<_TaskListView> {
+  static const Duration _reorderDelay = Duration(milliseconds: 380);
+  final Map<int, _PendingTaskState> _pendingStates = {};
+
+  @override
+  void dispose() {
+    for (final pending in _pendingStates.values) {
+      pending.timer?.cancel();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveTasks = widget.tasks
+        .map(
+          (task) => _RenderableTask(
+            task: task,
+            displayCompleted:
+                _pendingStates[task.lineIndex]?.targetCompleted ?? task.isCompleted,
+            sectionCompleted: _sectionCompleted(task),
+          ),
+        )
+        .toList();
+    final activeTasks = effectiveTasks
+      ..sort((a, b) {
+        if (a.sectionCompleted == b.sectionCompleted) {
+          return a.task.lineIndex.compareTo(b.task.lineIndex);
+        }
+        return a.sectionCompleted ? 1 : -1;
+      });
+    final active = activeTasks.where((item) => !item.sectionCompleted).toList();
+    final completed = activeTasks.where((item) => item.sectionCompleted).toList();
+    final remindersByLine = _taskRemindersByLine();
+    final suggestionsByLine = {
+      for (final suggestion in widget.taskSuggestions)
+        suggestion.task.lineIndex: suggestion.reminder,
+    };
+
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ...active.map((item) {
+            final reminder = remindersByLine[item.task.lineIndex];
+            final suggestion =
+                reminder == null ? suggestionsByLine[item.task.lineIndex] : null;
+            return _TaskRow(
+              task: item.task.copyWith(isCompleted: item.displayCompleted),
+              onToggle: () => _handleToggle(item.task, item.displayCompleted),
+              reminder: reminder,
+              suggestion: suggestion,
+              onSuggestionTap: suggestion == null
+                  ? null
+                  : () => _createTaskReminder(item.task, suggestion),
+              onLongPress: () => _confirmDeleteTask(item.task),
+            );
+          }),
+          if (completed.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Completed',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            ...completed.map((item) {
+              final reminder = remindersByLine[item.task.lineIndex];
+              return _TaskRow(
+                task: item.task.copyWith(isCompleted: item.displayCompleted),
+                onToggle: () => _handleToggle(item.task, item.displayCompleted),
+                reminder: reminder,
+                onLongPress: () => _confirmDeleteTask(item.task),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  bool _sectionCompleted(NoteTask task) {
+    final pending = _pendingStates[task.lineIndex];
+    if (pending == null || !pending.moveToTargetSection) {
+      return task.isCompleted;
+    }
+    return pending.targetCompleted;
+  }
+
+  Map<int, Reminder> _taskRemindersByLine() {
+    final map = <int, Reminder>{};
+    for (final reminder in widget.reminders) {
+      final lineIndex = reminder.taskLineIndex;
+      if (lineIndex == null) {
+        continue;
+      }
+
+      final existing = map[lineIndex];
+      if (existing == null ||
+          (existing.isCompleted && !reminder.isCompleted) ||
+          reminder.scheduledAt.isBefore(existing.scheduledAt)) {
+        map[lineIndex] = reminder;
+      }
+    }
+
+    return map;
+  }
+
+  Future<void> _handleToggle(NoteTask task, bool currentDisplayCompleted) async {
+    final targetCompleted = !currentDisplayCompleted;
+    _pendingStates[task.lineIndex]?.timer?.cancel();
+
+    setState(() {
+      _pendingStates[task.lineIndex] = _PendingTaskState(
+        targetCompleted: targetCompleted,
+      );
+    });
+
+    final timer = Timer(_reorderDelay, () async {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _pendingStates[task.lineIndex] = _PendingTaskState(
+          targetCompleted: targetCompleted,
+          moveToTargetSection: true,
+        );
+      });
+
+      try {
+        await widget.onToggleTask(task, targetCompleted);
+      } finally {
+        if (mounted) {
+          setState(() {
+            _pendingStates.remove(task.lineIndex);
+          });
+        }
+      }
+    });
+
+    _pendingStates[task.lineIndex] = _PendingTaskState(
+      targetCompleted: targetCompleted,
+      timer: timer,
+    );
+  }
+
+  Future<void> _createTaskReminder(
+    NoteTask task,
+    ParsedReminder suggestion,
+  ) async {
+    final user = ref.read(firebaseAuthProvider).currentUser;
+    if (user == null) {
+      return;
+    }
+
+    try {
+      await ref.read(remindersServiceProvider).createReminder(
+            userId: user.uid,
+            noteId: widget.note.id,
+            taskLineIndex: task.lineIndex,
+            notePreview: task.text,
+            scheduledAt: suggestion.dateTime,
+            repeat: RepeatType.none,
+            notificationId: DateTime.now()
+                .microsecondsSinceEpoch
+                .remainder(2147483647),
+          );
+      _showMessage('Reminder added for task.');
+    } catch (error) {
+      _showMessage('Could not add reminder: $error');
+    }
+  }
+
+  Future<void> _confirmDeleteTask(NoteTask task) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete this task?'),
+          content: const Text('Delete this task?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    final pending = _pendingStates.remove(task.lineIndex);
+    pending?.timer?.cancel();
+    await widget.onDeleteTask(task);
+    _showMessage('Task deleted.');
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _TaskRow extends StatelessWidget {
+  const _TaskRow({
+    required this.task,
+    required this.onToggle,
+    this.reminder,
+    this.suggestion,
+    this.onSuggestionTap,
+    this.onLongPress,
+  });
+
+  final NoteTask task;
+  final VoidCallback onToggle;
+  final Reminder? reminder;
+  final ParsedReminder? suggestion;
+  final VoidCallback? onSuggestionTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final baseStyle = Theme.of(context).textTheme.bodyMedium;
+    final completedColor = Theme.of(
+      context,
+    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7);
+
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 160),
+      opacity: task.isCompleted ? 0.68 : 1,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onLongPress: onLongPress,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            color: task.isCompleted
+                ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.28)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Checkbox(
+                  value: task.isCompleted,
+                  onChanged: (_) => onToggle(),
+                  visualDensity: VisualDensity.compact,
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12, right: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                task.text.isEmpty ? 'Untitled task' : task.text,
+                                style: baseStyle?.copyWith(
+                                  decoration: task.isCompleted
+                                      ? TextDecoration.lineThrough
+                                      : TextDecoration.none,
+                                  color: task.isCompleted
+                                      ? completedColor
+                                      : baseStyle.color,
+                                ),
+                              ),
+                            ),
+                            if (reminder != null) ...[
+                              const SizedBox(width: AppSpacing.xs),
+                              Icon(
+                                Icons.notifications_active_outlined,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                            ],
+                          ],
+                        ),
+                        if (suggestion != null && onSuggestionTap != null) ...[
+                          const SizedBox(height: 4),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton(
+                              onPressed: onSuggestionTap,
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 0,
+                                ),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: const Text('Remind you?'),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PendingTaskState {
+  const _PendingTaskState({
+    required this.targetCompleted,
+    this.moveToTargetSection = false,
+    this.timer,
+  });
+
+  final bool targetCompleted;
+  final bool moveToTargetSection;
+  final Timer? timer;
+}
+
+class _RenderableTask {
+  const _RenderableTask({
+    required this.task,
+    required this.displayCompleted,
+    required this.sectionCompleted,
+  });
+
+  final NoteTask task;
+  final bool displayCompleted;
+  final bool sectionCompleted;
 }
 
 class _SmartReminderSuggestionBar extends StatelessWidget {

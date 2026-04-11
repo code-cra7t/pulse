@@ -7,6 +7,7 @@ class Reminder {
     required this.id,
     required this.userId,
     required this.noteId,
+    required this.taskLineIndex,
     required this.notePreview,
     required this.scheduledAt,
     required this.isCompleted,
@@ -19,6 +20,7 @@ class Reminder {
   final String id;
   final String userId;
   final String noteId;
+  final int? taskLineIndex;
   final String notePreview;
   final DateTime scheduledAt;
   final bool isCompleted;
@@ -34,6 +36,7 @@ class Reminder {
       id: doc.id,
       userId: data['userId'] as String? ?? '',
       noteId: data['noteId'] as String? ?? '',
+      taskLineIndex: data['taskLineIndex'] as int?,
       notePreview: data['notePreview'] as String? ?? '',
       scheduledAt:
           (data['scheduledAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -49,6 +52,7 @@ class Reminder {
     return {
       'userId': userId,
       'noteId': noteId,
+      'taskLineIndex': taskLineIndex,
       'notePreview': notePreview,
       'scheduledAt': Timestamp.fromDate(scheduledAt),
       'isCompleted': isCompleted,
@@ -63,6 +67,7 @@ class Reminder {
     String? id,
     String? userId,
     String? noteId,
+    Object? taskLineIndex = _unsetTaskLineIndex,
     String? notePreview,
     DateTime? scheduledAt,
     bool? isCompleted,
@@ -75,6 +80,9 @@ class Reminder {
       id: id ?? this.id,
       userId: userId ?? this.userId,
       noteId: noteId ?? this.noteId,
+      taskLineIndex: identical(taskLineIndex, _unsetTaskLineIndex)
+          ? this.taskLineIndex
+          : taskLineIndex as int?,
       notePreview: notePreview ?? this.notePreview,
       scheduledAt: scheduledAt ?? this.scheduledAt,
       isCompleted: isCompleted ?? this.isCompleted,
@@ -85,3 +93,5 @@ class Reminder {
     );
   }
 }
+
+const _unsetTaskLineIndex = Object();

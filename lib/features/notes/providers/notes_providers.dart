@@ -90,7 +90,7 @@ final notesStreamProvider = StreamProvider<List<Note>>((ref) {
       return notesService.watchNotes(user.uid);
     },
     loading: () => Stream.value(const <Note>[]),
-    error: (_, __) => Stream.value(const <Note>[]),
+    error: (_, _) => Stream.value(const <Note>[]),
   );
 });
 

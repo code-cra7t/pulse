@@ -1,6 +1,7 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/calendar_event_service.dart';
 import '../../../core/services/firebase_providers.dart';
 import '../../../core/services/local_notifications_service.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -17,10 +18,15 @@ final localNotificationsServiceProvider = Provider<LocalNotificationsService>((r
   return LocalNotificationsService(plugin);
 });
 
+final calendarEventServiceProvider = Provider<CalendarEventService>((ref) {
+  return CalendarEventService();
+});
+
 final remindersServiceProvider = Provider<RemindersService>((ref) {
   final firestore = ref.watch(firestoreProvider);
   final notifications = ref.watch(localNotificationsServiceProvider);
-  return RemindersService(firestore, notifications);
+  final calendar = ref.watch(calendarEventServiceProvider);
+  return RemindersService(firestore, notifications, calendar);
 });
 
 final remindersStreamProvider = StreamProvider<List<Reminder>>((ref) {

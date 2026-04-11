@@ -1,14 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/services/calendar_event_service.dart';
 import '../../../core/services/local_notifications_service.dart';
 import '../models/reminder.dart';
 import '../models/repeat_type.dart';
 
 class RemindersService {
-  RemindersService(this._firestore, this._notificationsService);
+  RemindersService(
+    this._firestore,
+    this._notificationsService,
+    this._calendarEventService,
+  );
 
   final FirebaseFirestore _firestore;
   final LocalNotificationsService _notificationsService;
+  final CalendarEventService _calendarEventService;
 
   CollectionReference<Map<String, dynamic>> get _remindersCollection {
     return _firestore.collection('reminders');
@@ -39,6 +45,7 @@ class RemindersService {
   Future<void> createReminder({
     required String userId,
     required String noteId,
+    int? taskLineIndex,
     required String notePreview,
     required DateTime scheduledAt,
     required RepeatType repeat,
@@ -55,9 +62,17 @@ class RemindersService {
       noteId: noteId,
     );
 
+    await _calendarEventService.addReminderToCalendar(
+      title: 'PulseNotes reminder',
+      body: notePreview,
+      scheduledAt: scheduledAt,
+      repeat: repeat,
+    );
+
     await _remindersCollection.add({
       'userId': userId,
       'noteId': noteId,
+      'taskLineIndex': taskLineIndex,
       'notePreview': notePreview,
       'scheduledAt': Timestamp.fromDate(scheduledAt),
       'isCompleted': false,
@@ -84,9 +99,9 @@ class RemindersService {
         );
   }
 
-  Future<void> deleteReminder(String reminderId, int notificationId) async {
-    await _notificationsService.cancelReminder(notificationId);
-    await _remindersCollection.doc(reminderId).delete();
+  Future<void> deleteReminder(Reminder reminder) async {
+    await _notificationsService.cancelReminder(reminder.notificationId);
+    await _remindersCollection.doc(reminder.id).delete();
   }
 
   Future<void> deleteRemindersForNote({

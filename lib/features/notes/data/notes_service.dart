@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/note.dart';
 import '../utils/tag_parser.dart';
+import '../utils/task_parser.dart';
 
 class NotesService {
   NotesService(this._firestore, this._storage);
@@ -32,33 +33,49 @@ class NotesService {
     });
   }
 
-  Future<void> createNote({
+  Future<Note> createNote({
     required String userId,
     String? title,
     bool isPinned = false,
     required String content,
     required int color,
     List<String> images = const [],
-  }) {
-    final tags = TagParser.extractTags(content);
+  }) async {
+    final normalizedContent = TaskParser.normalizeTaskContent(content);
+    final tags = TagParser.extractTags(normalizedContent);
     final now = DateTime.now();
 
-    return _notesCollection.add({
+    final doc = await _notesCollection.add({
       'userId': userId,
       'title': title,
       'isPinned': isPinned,
       'createdAt': Timestamp.fromDate(now),
       'updatedAt': Timestamp.fromDate(now),
       'tags': tags,
-      'content': content,
+      'content': normalizedContent,
       'color': color,
       'images': images,
     });
+
+    return Note(
+      id: doc.id,
+      userId: userId,
+      title: title,
+      isPinned: isPinned,
+      createdAt: now,
+      updatedAt: now,
+      tags: tags,
+      content: normalizedContent,
+      color: color,
+      images: images,
+    );
   }
 
   Future<void> updateNote(Note note) {
+    final normalizedContent = TaskParser.normalizeTaskContent(note.content);
     final updatedNote = note.copyWith(
-      tags: TagParser.extractTags(note.content),
+      content: normalizedContent,
+      tags: TagParser.extractTags(normalizedContent),
       updatedAt: DateTime.now(),
     );
     return _notesCollection.doc(note.id).update(updatedNote.toMap());

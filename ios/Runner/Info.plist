@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>NSUserNotificationUsageDescription</key>
 	<string>PulseNotes uses notifications for note reminders.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>PulseNotes adds reminders to your calendar so they also appear on your device.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>PulseNotes may open the calendar app when adding reminder events.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
