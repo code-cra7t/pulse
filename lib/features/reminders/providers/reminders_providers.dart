@@ -13,7 +13,9 @@ final flutterLocalNotificationsPluginProvider =
       return FlutterLocalNotificationsPlugin();
     });
 
-final localNotificationsServiceProvider = Provider<LocalNotificationsService>((ref) {
+final localNotificationsServiceProvider = Provider<LocalNotificationsService>((
+  ref,
+) {
   final plugin = ref.watch(flutterLocalNotificationsPluginProvider);
   return LocalNotificationsService(plugin);
 });
@@ -69,7 +71,9 @@ final nextReminderForNoteProvider =
       final remindersAsync = ref.watch(noteRemindersStreamProvider(noteId));
 
       return remindersAsync.whenData((reminders) {
-        final activeReminders = reminders.where((item) => !item.isCompleted).toList();
+        final activeReminders = reminders
+            .where((item) => !item.isCompleted)
+            .toList();
         if (activeReminders.isEmpty) {
           return null;
         }

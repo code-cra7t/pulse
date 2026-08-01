@@ -17,15 +17,24 @@ class TaskParser {
     final tasks = <NoteTask>[];
 
     for (var index = 0; index < lines.length; index++) {
+      final legacyMatch = _legacyCheckboxTaskPattern.firstMatch(lines[index]);
+      final legacyText = (legacyMatch?.group(3) ?? '').trim();
+      if (legacyMatch != null && legacyText.isNotEmpty) {
+        tasks.add(
+          NoteTask(
+            lineIndex: index,
+            text: legacyText,
+            isCompleted: (legacyMatch.group(2) ?? '').toLowerCase() == 'x',
+          ),
+        );
+        continue;
+      }
+
       final completedMatch = _completedTaskPattern.firstMatch(lines[index]);
       final completedText = (completedMatch?.group(2) ?? '').trim();
       if (completedMatch != null && completedText.isNotEmpty) {
         tasks.add(
-          NoteTask(
-            lineIndex: index,
-            text: completedText,
-            isCompleted: true,
-          ),
+          NoteTask(lineIndex: index, text: completedText, isCompleted: true),
         );
         continue;
       }
@@ -33,41 +42,27 @@ class TaskParser {
       final bulletMatch = _bulletTaskPattern.firstMatch(lines[index]);
       final text = (bulletMatch?.group(2) ?? '').trim();
       if (bulletMatch != null && text.isNotEmpty) {
-        tasks.add(
-          NoteTask(
-            lineIndex: index,
-            text: text,
-            isCompleted: false,
-          ),
-        );
+        tasks.add(NoteTask(lineIndex: index, text: text, isCompleted: false));
         continue;
       }
-
-      final legacyMatch = _legacyCheckboxTaskPattern.firstMatch(lines[index]);
-      final legacyText = (legacyMatch?.group(3) ?? '').trim();
-      if (legacyMatch == null || legacyText.isEmpty) {
-        continue;
-      }
-
-      tasks.add(
-        NoteTask(
-          lineIndex: index,
-          text: legacyText,
-          isCompleted: (legacyMatch.group(2) ?? '').toLowerCase() == 'x',
-        ),
-      );
     }
 
     return tasks;
   }
 
   static String toggleTask(String content, int lineIndex) {
-    final currentTask = extractTasks(content).where((task) => task.lineIndex == lineIndex);
+    final currentTask = extractTasks(
+      content,
+    ).where((task) => task.lineIndex == lineIndex);
     if (currentTask.isEmpty) {
       return content;
     }
 
-    return setTaskCompletion(content, lineIndex, !currentTask.first.isCompleted);
+    return setTaskCompletion(
+      content,
+      lineIndex,
+      !currentTask.first.isCompleted,
+    );
   }
 
   static String setTaskCompletion(
@@ -80,11 +75,15 @@ class TaskParser {
       return content;
     }
 
-    final checkboxMatch = _legacyCheckboxTaskPattern.firstMatch(lines[lineIndex]);
+    final checkboxMatch = _legacyCheckboxTaskPattern.firstMatch(
+      lines[lineIndex],
+    );
     if (checkboxMatch != null) {
       final indent = checkboxMatch.group(1) ?? '';
       final taskText = checkboxMatch.group(3) ?? '';
-      lines[lineIndex] = isCompleted ? '$indent- done: $taskText' : '$indent- $taskText';
+      lines[lineIndex] = isCompleted
+          ? '$indent- done: $taskText'
+          : '$indent- $taskText';
       return lines.join('\n');
     }
 
@@ -92,7 +91,9 @@ class TaskParser {
     final completedText = (completedMatch?.group(2) ?? '').trim();
     if (completedMatch != null && completedText.isNotEmpty) {
       final indent = completedMatch.group(1) ?? '';
-      lines[lineIndex] = isCompleted ? '$indent- done: $completedText' : '$indent- $completedText';
+      lines[lineIndex] = isCompleted
+          ? '$indent- done: $completedText'
+          : '$indent- $completedText';
       return lines.join('\n');
     }
 
@@ -103,7 +104,9 @@ class TaskParser {
     }
 
     final indent = bulletMatch.group(1) ?? '';
-    lines[lineIndex] = isCompleted ? '$indent- done: $taskText' : '$indent- $taskText';
+    lines[lineIndex] = isCompleted
+        ? '$indent- done: $taskText'
+        : '$indent- $taskText';
     return lines.join('\n');
   }
 
@@ -129,7 +132,9 @@ class TaskParser {
 
       final indent = legacyMatch.group(1) ?? '';
       final isCompleted = (legacyMatch.group(2) ?? '').toLowerCase() == 'x';
-      lines[index] = isCompleted ? '$indent- done: $taskText' : '$indent- $taskText';
+      lines[index] = isCompleted
+          ? '$indent- done: $taskText'
+          : '$indent- $taskText';
     }
 
     return lines.join('\n');
@@ -150,10 +155,7 @@ class TaskParser {
             return null;
           }
 
-          return TaskReminderSuggestion(
-            task: task,
-            reminder: reminder,
-          );
+          return TaskReminderSuggestion(task: task, reminder: reminder);
         })
         .whereType<TaskReminderSuggestion>()
         .toList();
@@ -174,10 +176,7 @@ class TaskParser {
 }
 
 class TaskReminderSuggestion {
-  const TaskReminderSuggestion({
-    required this.task,
-    required this.reminder,
-  });
+  const TaskReminderSuggestion({required this.task, required this.reminder});
 
   final NoteTask task;
   final ParsedReminder reminder;

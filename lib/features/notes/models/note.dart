@@ -39,16 +39,37 @@ class Note {
       userId: data['userId'] as String? ?? '',
       title: data['title'] as String?,
       isPinned: data['isPinned'] as bool? ?? false,
-      createdAt: createdAt ?? updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
-      updatedAt: updatedAt ?? createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+      createdAt:
+          createdAt ?? updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+      updatedAt:
+          updatedAt ?? createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
       tags: (data['tags'] as List<dynamic>? ?? const [])
           .map((item) => item.toString())
           .toList(),
       content: data['content'] as String? ?? '',
       color: data['color'] as int? ?? 0xFFFFF8E1,
-      images: (data['images'] as List<dynamic>? ?? const [])
+      images: _readImageUrls(data),
+    );
+  }
+
+  factory Note.fromLocalMap(Map<String, dynamic> data) {
+    return Note(
+      id: data['id'] as String? ?? '',
+      userId: data['userId'] as String? ?? '',
+      title: data['title'] as String?,
+      isPinned: data['isPinned'] as bool? ?? false,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+        data['createdAtMs'] as int? ?? 0,
+      ),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(
+        data['updatedAtMs'] as int? ?? 0,
+      ),
+      tags: (data['tags'] as List<dynamic>? ?? const [])
           .map((item) => item.toString())
           .toList(),
+      content: data['content'] as String? ?? '',
+      color: data['color'] as int? ?? 0xFFFFF8E1,
+      images: _readImageUrls(data),
     );
   }
 
@@ -59,6 +80,21 @@ class Note {
       'isPinned': isPinned,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      'tags': tags,
+      'content': content,
+      'color': color,
+      'images': images,
+    };
+  }
+
+  Map<String, dynamic> toLocalMap() {
+    return {
+      'id': id,
+      'userId': userId,
+      'title': title,
+      'isPinned': isPinned,
+      'createdAtMs': createdAt.millisecondsSinceEpoch,
+      'updatedAtMs': updatedAt.millisecondsSinceEpoch,
       'tags': tags,
       'content': content,
       'color': color,
@@ -91,4 +127,20 @@ class Note {
       images: images ?? this.images,
     );
   }
+}
+
+List<String> _readImageUrls(Map<String, dynamic> data) {
+  final urls = <String>{};
+  for (final field in const ['images', 'imageUrls']) {
+    final value = data[field];
+    if (value is Iterable) {
+      for (final item in value) {
+        final url = item.toString().trim();
+        if (url.isNotEmpty) {
+          urls.add(url);
+        }
+      }
+    }
+  }
+  return urls.toList();
 }

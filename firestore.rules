@@ -1,0 +1,124 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function owns(data) {
+      return signedIn() && data.userId == request.auth.uid;
+    }
+
+    function validNote(data) {
+      return data.keys().hasAll([
+          'userId', 'title', 'isPinned', 'createdAt', 'updatedAt',
+          'tags', 'content', 'color', 'images'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'title', 'isPinned', 'createdAt', 'updatedAt',
+          'tags', 'content', 'color', 'images', 'imageUrls'
+        ])
+        && data.userId == request.auth.uid
+        && (data.title is string || data.title == null)
+        && data.isPinned is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.tags is list
+        && data.content is string
+        && data.color is int
+        && data.images is list
+        && (!data.keys().hasAny(['imageUrls']) || data.imageUrls is list);
+    }
+
+    function validReminder(data) {
+      return data.keys().hasAll([
+          'userId', 'noteId', 'taskLineIndex', 'notePreview', 'scheduledAt',
+          'isCompleted', 'repeat', 'notificationId', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'noteId', 'taskLineIndex', 'notePreview', 'scheduledAt',
+          'isCompleted', 'repeat', 'notificationId', 'createdAt', 'updatedAt'
+        ])
+        && data.userId == request.auth.uid
+        && data.noteId is string
+        && (data.taskLineIndex is int || data.taskLineIndex == null)
+        && data.notePreview is string
+        && data.scheduledAt is timestamp
+        && data.isCompleted is bool
+        && data.repeat in ['none', 'daily', 'weekly']
+        && data.notificationId is int
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validProfile(userId, data) {
+      return data.keys().hasAll([
+          'uid', 'displayName', 'email', 'photoUrl', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'displayName', 'email', 'photoUrl', 'createdAt', 'updatedAt'
+        ])
+        && data.uid == userId
+        && data.displayName is string
+        && data.email is string
+        && (data.photoUrl is string || data.photoUrl == null)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validSettings(data) {
+      return data.keys().hasAll([
+          'themeMode', 'defaultNoteTag', 'notificationsEnabled',
+          'smartRemindersEnabled', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'themeMode', 'defaultNoteTag', 'notificationsEnabled',
+          'smartRemindersEnabled', 'updatedAt'
+        ])
+        && data.themeMode in ['system', 'light', 'dark']
+        && data.defaultNoteTag is string
+        && data.notificationsEnabled is bool
+        && data.smartRemindersEnabled is bool
+        && data.updatedAt is timestamp;
+    }
+
+    match /notes/{noteId} {
+      allow read, delete: if owns(resource.data);
+      allow create: if signedIn() && validNote(request.resource.data);
+      allow update: if owns(resource.data)
+        && validNote(request.resource.data)
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /reminders/{reminderId} {
+      allow read, delete: if owns(resource.data);
+      allow create: if signedIn() && validReminder(request.resource.data);
+      allow update: if owns(resource.data)
+        && validReminder(request.resource.data)
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /users/{userId} {
+      allow read, delete: if isUser(userId);
+      allow create, update: if isUser(userId)
+        && validProfile(userId, request.resource.data);
+
+      match /settings/{settingsId} {
+        allow read: if isUser(userId);
+        allow create, update: if isUser(userId)
+          && settingsId == 'app'
+          && validSettings(request.resource.data);
+        allow delete: if isUser(userId) && settingsId == 'app';
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

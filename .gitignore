@@ -43,3 +43,16 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local secrets and deployment credentials
+.env
+.env.*
+!.env.example
+*.tfvars
+*.tfvars.json
+service-account*.json
+firebase-admin*.json
+**/key.properties
+**/*.keystore
+**/*.jks
+secrets/

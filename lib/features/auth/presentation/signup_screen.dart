@@ -145,7 +145,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                                   return 'Confirm your password.';
                                 }
 
-                                if (value.trim() != _passwordController.text.trim()) {
+                                if (value.trim() !=
+                                    _passwordController.text.trim()) {
                                   return 'Passwords do not match.';
                                 }
 

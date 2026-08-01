@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/offline/offline_note_store.dart';
+import '../../../core/services/connectivity_providers.dart';
 import '../../../core/services/firebase_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../data/notes_service.dart';
@@ -71,13 +75,32 @@ class NotesFilterNotifier extends Notifier<NotesFilterState> {
   }
 }
 
+final offlineNoteStoreProvider = Provider<OfflineNoteStore>((ref) {
+  final store = OfflineNoteStore();
+  ref.onDispose(() => unawaited(store.dispose()));
+  return store;
+});
+
 final notesServiceProvider = Provider<NotesService>((ref) {
   final firestore = ref.watch(firestoreProvider);
   final storage = ref.watch(firebaseStorageProvider);
-  return NotesService(firestore, storage);
+  final offlineStore = ref.watch(offlineNoteStoreProvider);
+  final service = NotesService(firestore, storage, offlineStore);
+  ref.onDispose(() => unawaited(service.dispose()));
+  return service;
+});
+
+final notesSyncProvider = Provider<void>((ref) {
+  final user = ref.watch(authStateChangesProvider).asData?.value;
+  final online = ref.watch(isOnlineProvider).asData?.value ?? false;
+  if (user != null && online) {
+    unawaited(ref.read(notesServiceProvider).synchronize(user.uid));
+  }
 });
 
 final notesStreamProvider = StreamProvider<List<Note>>((ref) {
+  ref.watch(notesSyncProvider);
+
   final authState = ref.watch(authStateChangesProvider);
   final notesService = ref.watch(notesServiceProvider);
 
@@ -132,17 +155,16 @@ final filteredNotesProvider = Provider<List<Note>>((ref) {
         query.isEmpty || title.contains(query) || content.contains(query);
 
     return matchesSearch && matchesTags && matchesColor;
-  }).toList()
-    ..sort((a, b) {
-      if (a.isPinned != b.isPinned) {
-        return a.isPinned ? -1 : 1;
-      }
+  }).toList()..sort((a, b) {
+    if (a.isPinned != b.isPinned) {
+      return a.isPinned ? -1 : 1;
+    }
 
-      final updatedCompare = b.updatedAt.compareTo(a.updatedAt);
-      if (updatedCompare != 0) {
-        return updatedCompare;
-      }
+    final updatedCompare = b.updatedAt.compareTo(a.updatedAt);
+    if (updatedCompare != 0) {
+      return updatedCompare;
+    }
 
-      return b.createdAt.compareTo(a.createdAt);
-    });
+    return b.createdAt.compareTo(a.createdAt);
+  });
 });

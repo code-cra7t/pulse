@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/services/calendar_event_service.dart';
 import '../../../core/services/local_notifications_service.dart';
@@ -21,13 +24,14 @@ class RemindersService {
   }
 
   Stream<List<Reminder>> watchReminders(String userId) {
-    return _remindersCollection.where('userId', isEqualTo: userId).snapshots().map((
-      snapshot,
-    ) {
-      final reminders = snapshot.docs.map(Reminder.fromFirestore).toList();
-      reminders.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
-      return reminders;
-    });
+    return _remindersCollection
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .map((snapshot) {
+          final reminders = snapshot.docs.map(Reminder.fromFirestore).toList();
+          reminders.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+          return reminders;
+        });
   }
 
   Stream<List<Reminder>> watchRemindersForNote(String userId, String noteId) {
@@ -52,51 +56,101 @@ class RemindersService {
     required int notificationId,
   }) async {
     final now = DateTime.now();
-
-    await _notificationsService.scheduleReminder(
-      notificationId: notificationId,
-      title: 'PulseNotes reminder',
-      body: notePreview,
-      scheduledAt: scheduledAt,
-      repeat: repeat,
-      noteId: noteId,
+    debugPrint(
+      '[RemindersService] event=create_start noteId=$noteId '
+      'notificationId=$notificationId at=$scheduledAt repeat=${repeat.value}',
     );
 
-    await _calendarEventService.addReminderToCalendar(
-      title: 'PulseNotes reminder',
-      body: notePreview,
-      scheduledAt: scheduledAt,
-      repeat: repeat,
-    );
+    try {
+      await _notificationsService.scheduleReminder(
+        notificationId: notificationId,
+        title: 'PulseNotes reminder',
+        body: notePreview,
+        scheduledAt: scheduledAt,
+        repeat: repeat,
+        noteId: noteId,
+      );
+      debugPrint(
+        '[RemindersService] event=local_schedule_success '
+        'notificationId=$notificationId',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[RemindersService] event=local_schedule_failure '
+        'notificationId=$notificationId error=$error\n$stackTrace',
+      );
+      rethrow;
+    }
 
-    await _remindersCollection.add({
-      'userId': userId,
-      'noteId': noteId,
-      'taskLineIndex': taskLineIndex,
-      'notePreview': notePreview,
-      'scheduledAt': Timestamp.fromDate(scheduledAt),
-      'isCompleted': false,
-      'repeat': repeat.value,
-      'notificationId': notificationId,
-      'createdAt': Timestamp.fromDate(now),
-      'updatedAt': Timestamp.fromDate(now),
-    });
+    try {
+      final document = await _remindersCollection.add({
+        'userId': userId,
+        'noteId': noteId,
+        'taskLineIndex': taskLineIndex,
+        'notePreview': notePreview,
+        'scheduledAt': Timestamp.fromDate(scheduledAt),
+        'isCompleted': false,
+        'repeat': repeat.value,
+        'notificationId': notificationId,
+        'createdAt': Timestamp.fromDate(now),
+        'updatedAt': Timestamp.fromDate(now),
+      });
+      debugPrint(
+        '[RemindersService] event=create_success reminderId=${document.id} '
+        'notificationId=$notificationId',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[RemindersService] event=firestore_create_failure '
+        'notificationId=$notificationId error=$error\n$stackTrace',
+      );
+      await _notificationsService.cancelReminder(notificationId);
+      rethrow;
+    }
+
+    unawaited(
+      _calendarEventService
+          .addReminderToCalendar(
+            title: 'PulseNotes reminder',
+            body: notePreview,
+            scheduledAt: scheduledAt,
+            repeat: repeat,
+          )
+          .catchError((Object error) {
+            debugPrint('[Calendar] could not add reminder event: $error');
+          }),
+    );
   }
 
   Future<void> updateReminder(Reminder reminder) async {
-    await _notificationsService.cancelReminder(reminder.notificationId);
-    await _notificationsService.scheduleReminder(
-      notificationId: reminder.notificationId,
-      title: 'PulseNotes reminder',
-      body: reminder.notePreview,
-      scheduledAt: reminder.scheduledAt,
-      repeat: reminder.repeat,
-      noteId: reminder.noteId,
+    debugPrint(
+      '[RemindersService] event=update_start reminderId=${reminder.id} '
+      'notificationId=${reminder.notificationId}',
     );
+    try {
+      await _notificationsService.cancelReminder(reminder.notificationId);
+      await _notificationsService.scheduleReminder(
+        notificationId: reminder.notificationId,
+        title: 'PulseNotes reminder',
+        body: reminder.notePreview,
+        scheduledAt: reminder.scheduledAt,
+        repeat: reminder.repeat,
+        noteId: reminder.noteId,
+      );
 
-    await _remindersCollection.doc(reminder.id).update(
-          reminder.copyWith(updatedAt: DateTime.now()).toMap(),
-        );
+      await _remindersCollection
+          .doc(reminder.id)
+          .update(reminder.copyWith(updatedAt: DateTime.now()).toMap());
+      debugPrint(
+        '[RemindersService] event=update_success reminderId=${reminder.id}',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[RemindersService] event=update_failure reminderId=${reminder.id} '
+        'error=$error\n$stackTrace',
+      );
+      rethrow;
+    }
   }
 
   Future<void> deleteReminder(Reminder reminder) async {
@@ -151,10 +205,9 @@ class RemindersService {
         .get();
 
     for (final doc in snapshot.docs) {
-      final reminder = Reminder.fromFirestore(doc).copyWith(
-        notePreview: notePreview,
-        updatedAt: DateTime.now(),
-      );
+      final reminder = Reminder.fromFirestore(
+        doc,
+      ).copyWith(notePreview: notePreview, updatedAt: DateTime.now());
 
       await doc.reference.update({
         'notePreview': notePreview,

@@ -1,12 +1,11 @@
 {
-    "name": "pulse",
-    "short_name": "pulse",
+    "name": "PulseNotes",
+    "short_name": "PulseNotes",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
+    "background_color": "#FFF7EF",
+    "theme_color": "#F2B36D",
     "description": "PulseNotes. Turn anything into a reminder automatically.",
-    "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
         {

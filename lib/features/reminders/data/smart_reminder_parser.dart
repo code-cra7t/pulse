@@ -13,6 +13,10 @@ class SmartReminderParser {
     r'\b([01]?\d|2[0-3]):([0-5][0-9])\b',
     caseSensitive: false,
   );
+  static final RegExp _contextHourPattern = RegExp(
+    r'\bat\s+([01]?\d|2[0-3])(?:[:.]([0-5][0-9]))?\b',
+    caseSensitive: false,
+  );
 
   static const Map<String, int> _weekdayMap = {
     'monday': DateTime.monday,
@@ -24,10 +28,7 @@ class SmartReminderParser {
     'sunday': DateTime.sunday,
   };
 
-  ParsedReminder? parse(
-    String input, {
-    DateTime? now,
-  }) {
+  ParsedReminder? parse(String input, {DateTime? now}) {
     final reference = now ?? DateTime.now();
     final normalized = input.trim().toLowerCase();
 
@@ -90,7 +91,7 @@ class SmartReminderParser {
 
       return ParsedReminder(
         dateTime: scheduled,
-        matchedPhrase: phrase,
+        matchedPhrase: time == null ? phrase : '$phrase ${time.matchedPhrase}',
       );
     }
 
@@ -116,11 +117,14 @@ class SmartReminderParser {
 
     final adjusted = scheduled.isAfter(now)
         ? scheduled
-        : scheduled.add(const Duration(hours: 1));
+        : now.add(const Duration(hours: 1));
+    final dayPhrase = hasTomorrow ? 'tomorrow' : 'today';
 
     return ParsedReminder(
       dateTime: adjusted,
-      matchedPhrase: hasTomorrow ? 'tomorrow' : 'today',
+      matchedPhrase: time == null
+          ? dayPhrase
+          : '$dayPhrase ${time.matchedPhrase}',
     );
   }
 
@@ -170,6 +174,15 @@ class SmartReminderParser {
       );
     }
 
+    final contextHourMatch = _contextHourPattern.firstMatch(input);
+    if (contextHourMatch != null) {
+      return _ParsedTime(
+        hour: int.parse(contextHourMatch.group(1)!),
+        minute: int.tryParse(contextHourMatch.group(2) ?? '0') ?? 0,
+        matchedPhrase: contextHourMatch.group(0) ?? '',
+      );
+    }
+
     return null;
   }
 
@@ -182,9 +195,11 @@ class SmartReminderParser {
   }
 
   DateTime _nextWeekday(DateTime now, int weekday) {
-    var date = DateTime(now.year, now.month, now.day).add(
-      const Duration(days: 1),
-    );
+    var date = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).add(const Duration(days: 1));
 
     while (date.weekday != weekday) {
       date = date.add(const Duration(days: 1));

@@ -32,6 +32,11 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# Firebase's Windows SDK still uses legacy CRT APIs, while firebase_storage
+# defines its own compatibility macro. Suppress only the resulting MSVC
+# warnings instead of redefining that macro for every plugin.
+add_compile_options(/wd4005 /wd4996)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
