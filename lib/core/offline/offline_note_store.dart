@@ -139,6 +139,21 @@ class OfflineNoteStore {
     await _mutationsStore.record(mutationId).delete(database);
   }
 
+  Future<void> clearUser(String userId) async {
+    final database = await _database;
+    await database.transaction((transaction) async {
+      await _notesStore.delete(
+        transaction,
+        finder: Finder(filter: Filter.equals('userId', userId)),
+      );
+      await _mutationsStore.delete(
+        transaction,
+        finder: Finder(filter: Filter.equals('userId', userId)),
+      );
+    });
+    await _emit(userId);
+  }
+
   Future<void> dispose() async {
     for (final controller in _controllers.values) {
       await controller.close();

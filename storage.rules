@@ -11,12 +11,7 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
     }
 
-    match /users/{userId}/notes/{noteId}/images/{fileName} {
-      allow read, delete: if isUser(userId);
-      allow create, update: if isUser(userId) && isValidImage();
-    }
-
-    match /users/{userId}/profile/{fileName} {
+    match /users/{userId}/{allPaths=**} {
       allow read, delete: if isUser(userId);
       allow create, update: if isUser(userId) && isValidImage();
     }

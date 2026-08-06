@@ -1,0 +1,6 @@
+# Copy this file to key.properties and replace every placeholder.
+# key.properties and *.jks are ignored by Git.
+storePassword=YOUR_UPLOAD_KEYSTORE_PASSWORD
+keyPassword=YOUR_UPLOAD_KEY_PASSWORD
+keyAlias=upload
+storeFile=app/upload-keystore.jks

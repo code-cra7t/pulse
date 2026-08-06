@@ -86,7 +86,7 @@ class LocalNotificationsService {
     await _configureLocalTimezone();
 
     const settings = InitializationSettings(
-      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      android: AndroidInitializationSettings('@drawable/ic_notification'),
       iOS: DarwinInitializationSettings(),
       windows: WindowsInitializationSettings(
         appName: 'PulseNotes',
@@ -113,8 +113,6 @@ class LocalNotificationsService {
     if (launchDetails?.didNotificationLaunchApp ?? false) {
       _handlePayload(launchDetails?.notificationResponse?.payload);
     }
-
-    await requestPermissions();
   }
 
   Future<void> requestPermissions() async {
@@ -145,6 +143,17 @@ class LocalNotificationsService {
         ?.requestPermissions(alert: true, badge: true, sound: true);
 
     _permissionsRequested = true;
+  }
+
+  Future<void> cancelAllReminders() async {
+    for (final timer in _webTimers.values) {
+      timer.cancel();
+    }
+    _webTimers.clear();
+
+    if (!kIsWeb) {
+      await _plugin.cancelAll();
+    }
   }
 
   Future<void> scheduleReminder({
@@ -203,6 +212,7 @@ class LocalNotificationsService {
           'pulse_reminders',
           'Pulse Reminders',
           channelDescription: 'Reminder notifications for notes',
+          icon: 'ic_notification',
           importance: Importance.max,
           priority: Priority.high,
           playSound: true,
@@ -294,6 +304,7 @@ class LocalNotificationsService {
             'pulse_reminders',
             'Pulse Reminders',
             channelDescription: 'Reminder notifications for notes',
+            icon: 'ic_notification',
             importance: Importance.max,
             priority: Priority.high,
             playSound: true,

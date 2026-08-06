@@ -83,6 +83,31 @@ void main() {
       expect(pending.single.type, PendingNoteMutationType.delete);
     },
   );
+
+  test('clears cached notes and mutations for only the selected user', () async {
+    final first = _note(content: 'First user');
+    final second = Note(
+      id: 'note-2',
+      userId: 'user-2',
+      title: 'Other note',
+      isPinned: false,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      tags: const [],
+      content: 'Second user',
+      color: 0xFFFFF8E1,
+      images: const [],
+    );
+
+    await store.stageUpsert(first, _upsertMutation('mutation-1', first));
+    await store.stageUpsert(second, _upsertMutation('mutation-2', second));
+    await store.clearUser(first.userId);
+
+    expect(await store.readNotes(first.userId), isEmpty);
+    expect(await store.pendingMutations(first.userId), isEmpty);
+    expect(await store.readNotes(second.userId), hasLength(1));
+    expect(await store.pendingMutations(second.userId), hasLength(1));
+  });
 }
 
 Note _note({required String content}) {
