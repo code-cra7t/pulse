@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/services/app_theme.dart';
+import '../../../core/services/alarm_handoff_service.dart';
 import '../../../core/widgets/adaptive_shell.dart';
 import '../../../core/widgets/pulse_components.dart';
 import '../../../core/services/firebase_providers.dart';
@@ -1068,6 +1069,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
   ];
   final SmartReminderParser _smartReminderParser = SmartReminderParser();
   final AssistantPlanParser _assistantPlanParser = AssistantPlanParser();
+  final AlarmHandoffService _alarmHandoffService = AlarmHandoffService();
 
   late final TextEditingController _titleController;
   late final TextEditingController _contentController;
@@ -1536,6 +1538,8 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                                     _suggestionKey(smartSuggestion),
                                   ),
                                   parsedReminder: smartSuggestion,
+                                  supportsAlarmHandoff:
+                                      _alarmHandoffService.isSupported,
                                   isLoading: _isCreatingSmartReminder,
                                   onCreate: _createSmartReminder,
                                   onDismiss: () {
@@ -1907,6 +1911,40 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
 
     try {
       final note = await _ensureWorkingNote();
+      if (parsed.needsScheduleChoice) {
+        await _openManualReminderWithOptions(
+          initialRepeat: RepeatType.interval,
+          initialIntervalMinutes: 60,
+        );
+        if (mounted) {
+          setState(() {
+            _dismissedSuggestionKey = _suggestionKey(parsed);
+          });
+        }
+        return;
+      }
+
+      if (parsed.requestsAlarm && _alarmHandoffService.isSupported) {
+        await _alarmHandoffService.openAlarm(
+          scheduledAt: parsed.dateTime,
+          label: _notePreview(
+            note.copyWith(
+              title: _normalizeTitle(_titleController.text),
+              content: _contentController.text.trim(),
+              color: _selectedColor,
+              images: _imageUrls,
+            ),
+          ),
+        );
+        if (mounted) {
+          setState(() {
+            _dismissedSuggestionKey = _suggestionKey(parsed);
+          });
+          _showMessage('Clock opened. Confirm the alarm there.');
+        }
+        return;
+      }
+
       await ref
           .read(remindersServiceProvider)
           .createReminder(
@@ -2005,7 +2043,12 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     }
   }
 
-  Future<void> _openManualReminder() async {
+  Future<void> _openManualReminder() => _openManualReminderWithOptions();
+
+  Future<void> _openManualReminderWithOptions({
+    RepeatType initialRepeat = RepeatType.none,
+    int initialIntervalMinutes = 60,
+  }) async {
     if (_contentController.text.trim().isEmpty) {
       _showMessage('Add some note content first.');
       return;
@@ -2021,6 +2064,8 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
         isScrollControlled: true,
         builder: (context) {
           return NoteRemindersSheet(
+            initialRepeat: initialRepeat,
+            initialIntervalMinutes: initialIntervalMinutes,
             note: note.copyWith(
               title: _normalizeTitle(_titleController.text),
               content: _contentController.text.trim(),
@@ -2185,7 +2230,8 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
 
   String _suggestionKey(ParsedReminder parsed) {
     return '${parsed.matchedPhrase}-${parsed.dateTime.toIso8601String()}-'
-        '${parsed.repeat.value}-${parsed.repeatIntervalMinutes ?? ''}';
+        '${parsed.repeat.value}-${parsed.repeatIntervalMinutes ?? ''}-'
+        '${parsed.needsScheduleChoice}-${parsed.requestsAlarm}';
   }
 
   String _reminderCreatedMessage(ParsedReminder parsed) {
@@ -2767,12 +2813,14 @@ class _SmartReminderSuggestionBar extends StatelessWidget {
   const _SmartReminderSuggestionBar({
     super.key,
     required this.parsedReminder,
+    required this.supportsAlarmHandoff,
     required this.isLoading,
     required this.onCreate,
     required this.onDismiss,
   });
 
   final ParsedReminder parsedReminder;
+  final bool supportsAlarmHandoff;
   final bool isLoading;
   final Future<void> Function() onCreate;
   final VoidCallback onDismiss;
@@ -2787,13 +2835,22 @@ class _SmartReminderSuggestionBar extends StatelessWidget {
     final time = MaterialLocalizations.of(
       context,
     ).formatTimeOfDay(TimeOfDay.fromDateTime(parsedReminder.dateTime));
-    final message = switch (parsedReminder.repeat) {
-      RepeatType.none => 'Add a reminder for $date at $time?',
-      RepeatType.daily => 'Add a daily reminder at $time?',
-      RepeatType.weekly => 'Add a weekly reminder for $date at $time?',
-      RepeatType.interval =>
-        'Repeat every ${_intervalLabel(parsedReminder.repeatIntervalMinutes ?? 30)}?',
-    };
+    final message = parsedReminder.needsScheduleChoice
+        ? 'You said regularly. Choose how often I should remind you?'
+        : parsedReminder.requestsAlarm && supportsAlarmHandoff
+        ? 'Open Clock to set an alarm for $time?'
+        : switch (parsedReminder.repeat) {
+            RepeatType.none => 'Add a reminder for $date at $time?',
+            RepeatType.daily => 'Add a daily reminder at $time?',
+            RepeatType.weekly => 'Add a weekly reminder for $date at $time?',
+            RepeatType.interval =>
+              'Repeat every ${_intervalLabel(parsedReminder.repeatIntervalMinutes ?? 30)}?',
+          };
+    final actionLabel = parsedReminder.needsScheduleChoice
+        ? 'Choose'
+        : parsedReminder.requestsAlarm && supportsAlarmHandoff
+        ? 'Open Clock'
+        : 'Add';
 
     return AppCard(
       color: background,
@@ -2822,7 +2879,7 @@ class _SmartReminderSuggestionBar extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           else ...[
-            TextButton(onPressed: onCreate, child: const Text('Add')),
+            TextButton(onPressed: onCreate, child: Text(actionLabel)),
             IconButton(
               onPressed: onDismiss,
               icon: const Icon(Icons.close_rounded, size: 18),

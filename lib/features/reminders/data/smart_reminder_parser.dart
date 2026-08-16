@@ -10,6 +10,18 @@ class SmartReminderParser {
     r'\bin\s+(\d+)\s+(minutes?|mins?|hours?|hrs?|days?|weeks?)\b',
     caseSensitive: false,
   );
+  static final RegExp _fromNowPattern = RegExp(
+    r'\b(a|an|one|\d+)\s+(minutes?|mins?|hours?|hrs?|days?|weeks?)\s+from\s+now\b',
+    caseSensitive: false,
+  );
+  static final RegExp _vagueRecurrencePattern = RegExp(
+    r'\b(regularly|regulary|frequently|often|throughout the day)\b',
+    caseSensitive: false,
+  );
+  static final RegExp _alarmIntentPattern = RegExp(
+    r'\b(alarm|wake me)\b',
+    caseSensitive: false,
+  );
   static final RegExp _intervalPattern = RegExp(
     r'\bevery\s+(\d+)\s+(minutes?|mins?|hours?|hrs?)\b',
     caseSensitive: false,
@@ -49,13 +61,23 @@ class SmartReminderParser {
       return null;
     }
 
-    return _parseInterval(normalized, reference) ??
+    final parsed =
+        _parseInterval(normalized, reference) ??
         _parseRecurringSchedule(normalized, reference) ??
         _parseRelativeTime(normalized, reference) ??
+        _parseNextWeek(normalized, reference) ??
         _parseWeekend(normalized, reference) ??
         _parseWeekday(normalized, reference) ??
         _parseTodayTomorrowOrNaturalTime(normalized, reference) ??
-        _parseStandaloneTime(normalized, reference);
+        _parseStandaloneTime(normalized, reference) ??
+        _parseVagueRecurrence(normalized, reference);
+
+    if (parsed == null) {
+      return null;
+    }
+    return _alarmIntentPattern.hasMatch(normalized)
+        ? parsed.copyWith(requestsAlarm: true)
+        : parsed;
   }
 
   ParsedReminder? _parseInterval(String input, DateTime now) {
@@ -146,12 +168,27 @@ class SmartReminderParser {
   }
 
   ParsedReminder? _parseRelativeTime(String input, DateTime now) {
-    final match = _relativePattern.firstMatch(input);
+    if (RegExp(
+      r'\bhalf\s+an?\s+hour\s+from\s+now\b',
+      caseSensitive: false,
+    ).hasMatch(input)) {
+      return ParsedReminder(
+        dateTime: now.add(const Duration(minutes: 30)),
+        matchedPhrase: 'half an hour from now',
+      );
+    }
+
+    final match =
+        _relativePattern.firstMatch(input) ?? _fromNowPattern.firstMatch(input);
     if (match == null) {
       return null;
     }
 
-    final amount = int.tryParse(match.group(1) ?? '');
+    final amountText = (match.group(1) ?? '').toLowerCase();
+    final amount = switch (amountText) {
+      'a' || 'an' || 'one' => 1,
+      _ => int.tryParse(amountText),
+    };
     if (amount == null || amount <= 0) {
       return null;
     }
@@ -167,6 +204,54 @@ class SmartReminderParser {
     return ParsedReminder(
       dateTime: now.add(duration),
       matchedPhrase: match.group(0) ?? '',
+    );
+  }
+
+  ParsedReminder? _parseNextWeek(String input, DateTime now) {
+    if (!input.contains('next week')) {
+      return null;
+    }
+
+    final weekdayMatch = _weekdayPattern.firstMatch(input);
+    final weekdayName = weekdayMatch?.group(2)?.toLowerCase();
+    final targetWeekday = weekdayName == null
+        ? DateTime.monday
+        : _weekdayMap[weekdayName]!;
+    final time = _extractTime(input) ?? _naturalTime(input);
+    final selectedTime =
+        time ?? const _ParsedTime(hour: 9, minute: 0, matchedPhrase: '');
+    final startOfThisWeek = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - DateTime.monday));
+    final startOfNextWeek = startOfThisWeek.add(const Duration(days: 7));
+    final targetDate = startOfNextWeek.add(Duration(days: targetWeekday - 1));
+    final scheduled = DateTime(
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
+      selectedTime.hour,
+      selectedTime.minute,
+    );
+    final weekdayPhrase = weekdayName == null ? '' : ' $weekdayName';
+    final timePhrase = time == null ? '' : ' ${time.matchedPhrase}';
+    return ParsedReminder(
+      dateTime: scheduled,
+      matchedPhrase: 'next week$weekdayPhrase$timePhrase',
+    );
+  }
+
+  ParsedReminder? _parseVagueRecurrence(String input, DateTime now) {
+    final match = _vagueRecurrencePattern.firstMatch(input);
+    if (match == null) {
+      return null;
+    }
+    return ParsedReminder(
+      dateTime: now.add(const Duration(hours: 1)),
+      matchedPhrase: match.group(0) ?? 'regularly',
+      repeat: RepeatType.interval,
+      needsScheduleChoice: true,
     );
   }
 

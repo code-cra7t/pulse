@@ -12,9 +12,16 @@ import '../models/repeat_type.dart';
 import '../providers/reminders_providers.dart';
 
 class NoteRemindersSheet extends ConsumerStatefulWidget {
-  const NoteRemindersSheet({super.key, required this.note});
+  const NoteRemindersSheet({
+    super.key,
+    required this.note,
+    this.initialRepeat = RepeatType.none,
+    this.initialIntervalMinutes = 60,
+  });
 
   final Note note;
+  final RepeatType initialRepeat;
+  final int initialIntervalMinutes;
 
   @override
   ConsumerState<NoteRemindersSheet> createState() => _NoteRemindersSheetState();
@@ -22,10 +29,17 @@ class NoteRemindersSheet extends ConsumerStatefulWidget {
 
 class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
   DateTime? _selectedDateTime;
-  RepeatType _repeat = RepeatType.none;
-  int _repeatIntervalMinutes = 30;
+  late RepeatType _repeat;
+  late int _repeatIntervalMinutes;
   bool _isSaving = false;
   bool _isTestingNotification = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _repeat = widget.initialRepeat;
+    _repeatIntervalMinutes = widget.initialIntervalMinutes;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -133,7 +147,7 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
                       )
                     : const Text('Add reminder'),
               ),
-              if (!kIsWeb) ...[
+              if (!kIsWeb && kDebugMode) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [

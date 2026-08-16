@@ -69,4 +69,47 @@ void main() {
     expect(weekly!.repeat, RepeatType.weekly);
     expect(weekly.dateTime, DateTime(2026, 6, 22, 9));
   });
+
+  test('asks the user to choose a schedule for vague recurrence', () {
+    final suggestion = parser.parse(
+      'I need to drink water regulary',
+      now: reference,
+    );
+
+    expect(suggestion, isNotNull);
+    expect(suggestion!.repeat, RepeatType.interval);
+    expect(suggestion.repeatIntervalMinutes, isNull);
+    expect(suggestion.needsScheduleChoice, isTrue);
+  });
+
+  test('uses next calendar week when next week is explicit', () {
+    final mondayReference = DateTime(2026, 6, 22, 8);
+    final general = parser.parse(
+      'Next week, I need to rearrange my calendar',
+      now: mondayReference,
+    );
+    final specific = parser.parse(
+      'Next week, rearrange my calendar Monday at 6pm',
+      now: mondayReference,
+    );
+
+    expect(general!.dateTime, DateTime(2026, 6, 29, 9));
+    expect(specific!.dateTime, DateTime(2026, 6, 29, 18));
+  });
+
+  test('recognizes natural from-now alarm requests', () {
+    final alarm = parser.parse(
+      'I need an alarm for an hour from now',
+      now: reference,
+    );
+    final halfHour = parser.parse(
+      'wake me half an hour from now',
+      now: reference,
+    );
+
+    expect(alarm!.dateTime, DateTime(2026, 6, 21, 9));
+    expect(alarm.requestsAlarm, isTrue);
+    expect(halfHour!.dateTime, DateTime(2026, 6, 21, 8, 30));
+    expect(halfHour.requestsAlarm, isTrue);
+  });
 }
