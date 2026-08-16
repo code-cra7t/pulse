@@ -14,6 +14,7 @@ import '../../../core/services/firebase_providers.dart';
 import '../../profile/presentation/profile_screen.dart';
 import '../../profile/providers/user_profile_providers.dart';
 import '../../reminders/data/smart_reminder_parser.dart';
+import '../../reminders/data/assistant_plan_parser.dart';
 import '../../reminders/models/parsed_reminder.dart';
 import '../../reminders/models/reminder.dart';
 import '../../reminders/models/repeat_type.dart';
@@ -172,7 +173,7 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
                     ? 'Try a different keyword or clear your filters.'
                     : 'Try adjusting your filters.',
                 emptyActionLabel: allNotes.isEmpty && !filter.hasActiveFilters
-                    ? 'New Note'
+                    ? 'New note'
                     : 'Clear filters',
                 onCreate: allNotes.isEmpty && !filter.hasActiveFilters
                     ? (user == null
@@ -570,7 +571,7 @@ class _DesktopNotesPanel extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        'All Notes',
+                        'All notes',
                         maxLines: 1,
                         softWrap: false,
                         overflow: TextOverflow.ellipsis,
@@ -585,7 +586,7 @@ class _DesktopNotesPanel extends StatelessWidget {
               IconButton.filled(
                 onPressed: onCreate,
                 icon: const Icon(Icons.add_rounded),
-                tooltip: 'New Note (Ctrl+N)',
+                tooltip: 'New note (Ctrl+N)',
               ),
             ],
           ),
@@ -633,8 +634,8 @@ class _DesktopNotesPanel extends StatelessWidget {
             child: notes.isEmpty
                 ? EmptyState(
                     title: 'No notes yet',
-                    message: 'Create your first PulseNote',
-                    actionLabel: 'New Note',
+                    message: 'Create your first note.',
+                    actionLabel: 'New note',
                     onAction: onCreate,
                   )
                 : ListView.separated(
@@ -972,7 +973,7 @@ class _NoteCard extends ConsumerWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          '${note.images.length} image(s) attached',
+                          '${note.images.length} ${note.images.length == 1 ? 'image' : 'images'} attached',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ),
@@ -1027,10 +1028,12 @@ class _ReminderSummary extends ConsumerWidget {
       TimeOfDay.fromDateTime(nextReminder.scheduledAt),
     );
 
+    final reminderLabel = activeCount == 1 ? 'reminder' : 'reminders';
+
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.xs),
       child: Text(
-        '$activeCount reminder(s) | next $date at $time',
+        '$activeCount $reminderLabel | next $date at $time',
         style: Theme.of(context).textTheme.bodySmall,
       ),
     );
@@ -1064,6 +1067,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     0xFFF3E5F5,
   ];
   final SmartReminderParser _smartReminderParser = SmartReminderParser();
+  final AssistantPlanParser _assistantPlanParser = AssistantPlanParser();
 
   late final TextEditingController _titleController;
   late final TextEditingController _contentController;
@@ -1072,9 +1076,11 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
   late String _lastContentValue;
   bool _isUploadingImage = false;
   bool _isCreatingSmartReminder = false;
+  bool _isCreatingPlanTasks = false;
   bool _isAutoFormattingContent = false;
   bool _allowRoutePop = false;
   String? _dismissedSuggestionKey;
+  String? _dismissedPlanKey;
   Object? _reportedSaveError;
 
   List<String> get _imageUrls => _draftController.draft.imageUrls;
@@ -1091,7 +1097,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     }
 
     return switch (_draftController.status) {
-      NoteSaveStatus.idle => 'Not saved',
+      NoteSaveStatus.idle => _workingNoteId == null ? 'Not saved' : 'Saved',
       NoteSaveStatus.saving => 'Saving...',
       NoteSaveStatus.saved => 'Saved',
       NoteSaveStatus.failed => 'Save failed',
@@ -1356,6 +1362,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final smartSuggestion = _currentSuggestion();
+    final planSuggestion = _currentPlanSuggestion();
     final workingNoteId = _workingNoteId;
     final editorSurface = AppColors.surface;
     final editorForeground = AppColors.textFor(editorSurface);
@@ -1536,6 +1543,24 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                                       _dismissedSuggestionKey = _suggestionKey(
                                         smartSuggestion,
                                       );
+                                    });
+                                  },
+                                ),
+                              ),
+                            ],
+                            if (planSuggestion != null) ...[
+                              const SizedBox(height: AppSpacing.sm),
+                              AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 180),
+                                child: _PlanSuggestionBar(
+                                  key: ValueKey(planSuggestion.key),
+                                  suggestion: planSuggestion,
+                                  isLoading: _isCreatingPlanTasks,
+                                  onCreate: () =>
+                                      _createTasksFromPlan(planSuggestion),
+                                  onDismiss: () {
+                                    setState(() {
+                                      _dismissedPlanKey = planSuggestion.key;
                                     });
                                   },
                                 ),
@@ -1786,11 +1811,15 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
       TaskParser.extractPlainTextLines(value).join('\n'),
     );
     final currentKey = parsed == null ? null : _suggestionKey(parsed);
+    final planKey = _assistantPlanParser.parse(value)?.key;
 
     setState(() {
       if (_dismissedSuggestionKey != null &&
           currentKey != _dismissedSuggestionKey) {
         _dismissedSuggestionKey = null;
+      }
+      if (_dismissedPlanKey != null && planKey != _dismissedPlanKey) {
+        _dismissedPlanKey = null;
       }
     });
   }
@@ -1848,6 +1877,24 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     return parsed;
   }
 
+  PlanSuggestion? _currentPlanSuggestion() {
+    final smartRemindersEnabled =
+        ref
+            .read(currentUserSettingsProvider)
+            .asData
+            ?.value
+            ?.smartRemindersEnabled ??
+        true;
+    if (!smartRemindersEnabled) {
+      return null;
+    }
+    final suggestion = _assistantPlanParser.parse(_contentController.text);
+    if (suggestion == null || suggestion.key == _dismissedPlanKey) {
+      return null;
+    }
+    return suggestion;
+  }
+
   Future<void> _createSmartReminder() async {
     final parsed = _currentSuggestion();
     if (parsed == null || _isCreatingSmartReminder) {
@@ -1874,7 +1921,8 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
               ),
             ),
             scheduledAt: parsed.dateTime,
-            repeat: RepeatType.none,
+            repeat: parsed.repeat,
+            repeatIntervalMinutes: parsed.repeatIntervalMinutes,
             notificationId: DateTime.now().microsecondsSinceEpoch.remainder(
               2147483647,
             ),
@@ -1888,7 +1936,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
         _dismissedSuggestionKey = _suggestionKey(parsed);
       });
 
-      _showMessage('Reminder created for ${_formatDateTime(parsed.dateTime)}.');
+      _showMessage(_reminderCreatedMessage(parsed));
     } catch (error) {
       _showMessage('Could not create reminder: $error');
     } finally {
@@ -1914,7 +1962,8 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
             taskLineIndex: task.lineIndex,
             notePreview: task.text,
             scheduledAt: suggestion.dateTime,
-            repeat: RepeatType.none,
+            repeat: suggestion.repeat,
+            repeatIntervalMinutes: suggestion.repeatIntervalMinutes,
             notificationId: DateTime.now().microsecondsSinceEpoch.remainder(
               2147483647,
             ),
@@ -1922,6 +1971,37 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
       _showMessage('Reminder added for task.');
     } catch (error) {
       _showMessage('Could not add reminder: $error');
+    }
+  }
+
+  Future<void> _createTasksFromPlan(PlanSuggestion suggestion) async {
+    if (_isCreatingPlanTasks) {
+      return;
+    }
+    setState(() {
+      _isCreatingPlanTasks = true;
+    });
+    try {
+      final lines = _contentController.text.split('\n');
+      for (final step in suggestion.steps) {
+        if (step.lineIndex >= 0 && step.lineIndex < lines.length) {
+          lines[step.lineIndex] = '- ${step.text}';
+        }
+      }
+      _replaceEditorContent(lines.join('\n'));
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _dismissedPlanKey = suggestion.key;
+      });
+      _showMessage('${suggestion.steps.length} plan steps are now tasks.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCreatingPlanTasks = false;
+        });
+      }
     }
   }
 
@@ -2104,7 +2184,25 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
   }
 
   String _suggestionKey(ParsedReminder parsed) {
-    return '${parsed.matchedPhrase}-${parsed.dateTime.toIso8601String()}';
+    return '${parsed.matchedPhrase}-${parsed.dateTime.toIso8601String()}-'
+        '${parsed.repeat.value}-${parsed.repeatIntervalMinutes ?? ''}';
+  }
+
+  String _reminderCreatedMessage(ParsedReminder parsed) {
+    if (parsed.repeat == RepeatType.interval) {
+      final minutes = parsed.repeatIntervalMinutes ?? 30;
+      final label = minutes % 60 == 0
+          ? '${minutes ~/ 60} ${minutes == 60 ? 'hour' : 'hours'}'
+          : '$minutes minutes';
+      return 'Repeating reminder created for every $label.';
+    }
+    if (parsed.repeat == RepeatType.daily) {
+      return 'Daily reminder created for ${_formatDateTime(parsed.dateTime)}.';
+    }
+    if (parsed.repeat == RepeatType.weekly) {
+      return 'Weekly reminder created for ${_formatDateTime(parsed.dateTime)}.';
+    }
+    return 'Reminder created for ${_formatDateTime(parsed.dateTime)}.';
   }
 
   String _formatDateTime(DateTime value) {
@@ -2436,7 +2534,8 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
             taskLineIndex: task.lineIndex,
             notePreview: task.text,
             scheduledAt: suggestion.dateTime,
-            repeat: RepeatType.none,
+            repeat: suggestion.repeat,
+            repeatIntervalMinutes: suggestion.repeatIntervalMinutes,
             notificationId: DateTime.now().microsecondsSinceEpoch.remainder(
               2147483647,
             ),
@@ -2688,12 +2787,18 @@ class _SmartReminderSuggestionBar extends StatelessWidget {
     final time = MaterialLocalizations.of(
       context,
     ).formatTimeOfDay(TimeOfDay.fromDateTime(parsedReminder.dateTime));
+    final message = switch (parsedReminder.repeat) {
+      RepeatType.none => 'Add a reminder for $date at $time?',
+      RepeatType.daily => 'Add a daily reminder at $time?',
+      RepeatType.weekly => 'Add a weekly reminder for $date at $time?',
+      RepeatType.interval =>
+        'Repeat every ${_intervalLabel(parsedReminder.repeatIntervalMinutes ?? 30)}?',
+    };
 
     return AppCard(
       color: background,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       borderColor: AppColors.ink.withValues(alpha: 0.08),
-      onTap: isLoading ? null : onCreate,
       child: Row(
         children: [
           const Icon(
@@ -2704,7 +2809,7 @@ class _SmartReminderSuggestionBar extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Create reminder for $date at $time?',
+              message,
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: foreground),
@@ -2716,12 +2821,73 @@ class _SmartReminderSuggestionBar extends StatelessWidget {
               height: 18,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          else
+          else ...[
+            TextButton(onPressed: onCreate, child: const Text('Add')),
             IconButton(
               onPressed: onDismiss,
               icon: const Icon(Icons.close_rounded, size: 18),
               tooltip: 'Dismiss',
             ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _intervalLabel(int minutes) {
+    if (minutes % 60 == 0) {
+      final hours = minutes ~/ 60;
+      return '$hours ${hours == 1 ? 'hour' : 'hours'}';
+    }
+    return '$minutes minutes';
+  }
+}
+
+class _PlanSuggestionBar extends StatelessWidget {
+  const _PlanSuggestionBar({
+    super.key,
+    required this.suggestion,
+    required this.isLoading,
+    required this.onCreate,
+    required this.onDismiss,
+  });
+
+  final PlanSuggestion suggestion;
+  final bool isLoading;
+  final Future<void> Function() onCreate;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = AppColors.mint;
+    return AppCard(
+      color: background,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      borderColor: AppColors.ink.withValues(alpha: 0.08),
+      child: Row(
+        children: [
+          const Icon(Icons.format_list_bulleted_rounded, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'I found ${suggestion.steps.length} plan steps. Turn them into tasks?',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+          if (isLoading)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else ...[
+            TextButton(onPressed: onCreate, child: const Text('Add tasks')),
+            IconButton(
+              onPressed: onDismiss,
+              icon: const Icon(Icons.close_rounded, size: 18),
+              tooltip: 'Dismiss',
+            ),
+          ],
         ],
       ),
     );

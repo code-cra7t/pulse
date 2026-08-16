@@ -26,7 +26,7 @@ class UserProfile {
 
     return UserProfile(
       uid: data['uid'] as String? ?? snapshot.id,
-      displayName: data['displayName'] as String? ?? 'PulseNotes User',
+      displayName: data['displayName'] as String? ?? 'JotCue User',
       email: data['email'] as String? ?? '',
       photoUrl: data['photoUrl'] as String?,
       createdAt:

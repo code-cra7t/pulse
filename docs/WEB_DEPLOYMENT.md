@@ -1,6 +1,6 @@
-# PulseNotes Web Deployment
+# JotCue Web Deployment
 
-PulseNotes Flutter Web is deployed through Firebase Hosting.
+JotCue Flutter Web is deployed through Firebase Hosting.
 
 ## Firebase Hosting Config
 
@@ -33,7 +33,7 @@ firebase deploy --only hosting
 
 ## Web Reminder Limitations
 
-PulseNotes Web currently avoids native scheduled local notifications. Web reminder support is limited to in-app reminder alerts while the app is open. Push notifications can be added later with a service worker and Firebase Cloud Messaging.
+JotCue Web currently avoids native scheduled local notifications. Web reminder support is limited to in-app reminder alerts while the app is open. Push notifications can be added later with a service worker and Firebase Cloud Messaging.
 
 ## Future Automation
 

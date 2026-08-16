@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/app_theme.dart';
+import 'jotcue_brand.dart';
 import 'pulse_components.dart';
 
 class AdaptiveShell extends StatelessWidget {
@@ -193,9 +194,6 @@ class _DesktopSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final logoBackground = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.primary.withValues(alpha: 0.24)
-        : AppColors.primarySoft;
     final width = compact ? 84.0 : 200.0;
     return SizedBox(
       width: width,
@@ -213,24 +211,12 @@ class _DesktopSidebar extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
               child: Row(
                 children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: logoBackground,
-                      borderRadius: BorderRadius.circular(AppRadii.sm),
-                    ),
-                    child: const Icon(
-                      Icons.auto_awesome_rounded,
-                      color: AppColors.primary,
-                      size: 20,
-                    ),
-                  ),
+                  const JotCueMark(size: 36),
                   if (!compact) ...[
                     const SizedBox(width: AppSpacing.xs),
                     Expanded(
                       child: Text(
-                        'PulseNotes',
+                        'JotCue',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleLarge,

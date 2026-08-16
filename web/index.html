@@ -18,22 +18,38 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="PulseNotes. Turn anything into a reminder automatically.">
-  <meta name="theme-color" content="#F2B36D">
+  <meta name="description" content="JotCue. Jot it down. We'll cue the rest.">
+  <meta name="theme-color" content="#1D1B18">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="PulseNotes">
+  <meta name="apple-mobile-web-app-title" content="JotCue">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>PulseNotes</title>
+  <title>JotCue</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body { height: 100%; margin: 0; background: #1D1B18; }
+    #jotcue-loading {
+      position: fixed; inset: 0; display: grid; place-content: center;
+      gap: 14px; text-align: center; color: #F8F5EE;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    #jotcue-loading img { width: 112px; height: 112px; margin: auto; }
+    #jotcue-loading strong { font-size: 28px; letter-spacing: -0.8px; }
+    #jotcue-loading span { color: rgba(248, 245, 238, 0.68); font-size: 14px; }
+  </style>
 </head>
 <body>
+  <div id="jotcue-loading" aria-label="Opening JotCue">
+    <img src="icons/Icon-192.png" alt="">
+    <strong>JotCue</strong>
+    <span>Jot it down. We’ll cue the rest.</span>
+  </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

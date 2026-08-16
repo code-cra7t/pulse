@@ -46,6 +46,41 @@ class RemindersService {
         });
   }
 
+  Future<void> restoreActiveNotifications(String userId) async {
+    final snapshot = await _remindersCollection
+        .where('userId', isEqualTo: userId)
+        .get();
+    final now = DateTime.now();
+    final reminders = snapshot.docs
+        .map(Reminder.fromFirestore)
+        .where(
+          (reminder) =>
+              !reminder.isCompleted &&
+              (reminder.repeat != RepeatType.none ||
+                  reminder.scheduledAt.isAfter(now)),
+        );
+
+    for (final reminder in reminders) {
+      try {
+        await _notificationsService.cancelReminder(reminder.notificationId);
+        await _notificationsService.scheduleReminder(
+          notificationId: reminder.notificationId,
+          title: 'JotCue reminder',
+          body: reminder.notePreview,
+          scheduledAt: reminder.scheduledAt,
+          repeat: reminder.repeat,
+          repeatIntervalMinutes: reminder.repeatIntervalMinutes,
+          noteId: reminder.noteId,
+        );
+      } catch (error, stackTrace) {
+        debugPrint(
+          '[RemindersService] event=restore_notification_failure '
+          'reminderId=${reminder.id} error=$error\n$stackTrace',
+        );
+      }
+    }
+  }
+
   Future<void> createReminder({
     required String userId,
     required String noteId,
@@ -53,6 +88,7 @@ class RemindersService {
     required String notePreview,
     required DateTime scheduledAt,
     required RepeatType repeat,
+    int? repeatIntervalMinutes,
     required int notificationId,
   }) async {
     final now = DateTime.now();
@@ -64,10 +100,11 @@ class RemindersService {
     try {
       await _notificationsService.scheduleReminder(
         notificationId: notificationId,
-        title: 'PulseNotes reminder',
+        title: 'JotCue reminder',
         body: notePreview,
         scheduledAt: scheduledAt,
         repeat: repeat,
+        repeatIntervalMinutes: repeatIntervalMinutes,
         noteId: noteId,
       );
       debugPrint(
@@ -91,6 +128,7 @@ class RemindersService {
         'scheduledAt': Timestamp.fromDate(scheduledAt),
         'isCompleted': false,
         'repeat': repeat.value,
+        'repeatIntervalMinutes': repeatIntervalMinutes,
         'notificationId': notificationId,
         'createdAt': Timestamp.fromDate(now),
         'updatedAt': Timestamp.fromDate(now),
@@ -111,7 +149,7 @@ class RemindersService {
     unawaited(
       _calendarEventService
           .addReminderToCalendar(
-            title: 'PulseNotes reminder',
+            title: 'JotCue reminder',
             body: notePreview,
             scheduledAt: scheduledAt,
             repeat: repeat,
@@ -131,10 +169,11 @@ class RemindersService {
       await _notificationsService.cancelReminder(reminder.notificationId);
       await _notificationsService.scheduleReminder(
         notificationId: reminder.notificationId,
-        title: 'PulseNotes reminder',
+        title: 'JotCue reminder',
         body: reminder.notePreview,
         scheduledAt: reminder.scheduledAt,
         repeat: reminder.repeat,
+        repeatIntervalMinutes: reminder.repeatIntervalMinutes,
         noteId: reminder.noteId,
       );
 
@@ -180,10 +219,11 @@ class RemindersService {
     } else {
       await _notificationsService.scheduleReminder(
         notificationId: reminder.notificationId,
-        title: 'PulseNotes reminder',
+        title: 'JotCue reminder',
         body: reminder.notePreview,
         scheduledAt: reminder.scheduledAt,
         repeat: reminder.repeat,
+        repeatIntervalMinutes: reminder.repeatIntervalMinutes,
         noteId: reminder.noteId,
       );
     }
@@ -218,10 +258,11 @@ class RemindersService {
         await _notificationsService.cancelReminder(reminder.notificationId);
         await _notificationsService.scheduleReminder(
           notificationId: reminder.notificationId,
-          title: 'PulseNotes reminder',
+          title: 'JotCue reminder',
           body: reminder.notePreview,
           scheduledAt: reminder.scheduledAt,
           repeat: reminder.repeat,
+          repeatIntervalMinutes: reminder.repeatIntervalMinutes,
           noteId: reminder.noteId,
         );
       }

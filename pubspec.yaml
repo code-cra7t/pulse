@@ -1,5 +1,5 @@
 name: pulse
-description: "PulseNotes. Turn anything into a reminder automatically."
+description: "JotCue. Jot it down. We'll cue the rest."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.0+4
 
 environment:
   sdk: ^3.11.4
@@ -38,6 +38,7 @@ dependencies:
   firebase_core: ^4.6.0
   cloud_firestore: ^6.2.0
   firebase_auth: ^6.3.0
+  google_sign_in: ^7.2.0
   firebase_storage: ^13.2.0
   image_picker: ^1.2.1
   flutter_local_notifications: ^21.0.0
@@ -71,19 +72,24 @@ dependency_overrides:
   firebase_storage: 12.4.4
 
 flutter_launcher_icons:
-  image_path: assets/branding/pulsenotes_icon.png
+  image_path: assets/branding/jotcue_icon.png
   android: true
-  adaptive_icon_background: "#FFF7EF"
-  adaptive_icon_foreground: assets/branding/pulsenotes_icon.png
+  ios: true
+  remove_alpha_ios: true
+  adaptive_icon_background: "#1D1B18"
+  adaptive_icon_foreground: assets/branding/jotcue_foreground.png
   web:
     generate: true
-    image_path: assets/branding/pulsenotes_icon.png
-    background_color: "#FFF7EF"
-    theme_color: "#F2B36D"
+    image_path: assets/branding/jotcue_icon.png
+    background_color: "#1D1B18"
+    theme_color: "#1D1B18"
   windows:
     generate: true
-    image_path: assets/branding/pulsenotes_icon.png
+    image_path: assets/branding/jotcue_icon.png
     icon_size: 256
+  macos:
+    generate: true
+    image_path: assets/branding/jotcue_icon.png
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -95,6 +101,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/branding/jotcue_foreground.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -1,8 +1,8 @@
-# PulseNotes Google Play Release
+# JotCue Google Play Release
 
 ## Release identity
 
-- App name: `PulseNotes`
+- App name: `JotCue`
 - Package name: `com.tori.pulse`
 - Version: `1.0.0 (1)`
 - Target SDK: Android 16 / API 36 (provided by Flutter 3.41.6)
@@ -15,11 +15,13 @@ The package name is registered with the current Firebase Android app. Confirm it
 Run this once from the project root, replacing the two password placeholders with strong, unique values:
 
 ```powershell
-keytool -genkeypair -v -storetype JKS -keystore android/app/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload -storepass YOUR_UPLOAD_KEYSTORE_PASSWORD -keypass YOUR_UPLOAD_KEY_PASSWORD -dname "CN=PulseNotes Upload, OU=Mobile, O=YOUR_DEVELOPER_NAME, L=YOUR_CITY, ST=YOUR_STATE, C=YOUR_COUNTRY_CODE"
+keytool -genkeypair -v -storetype JKS -keystore android/app/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload -storepass YOUR_UPLOAD_KEYSTORE_PASSWORD -keypass YOUR_UPLOAD_KEY_PASSWORD -dname "CN=JotCue Upload, OU=Mobile, O=YOUR_DEVELOPER_NAME, L=YOUR_CITY, ST=YOUR_STATE, C=YOUR_COUNTRY_CODE"
 Copy-Item android/key.properties.example android/key.properties
 ```
 
 Then replace the placeholders in `android/key.properties`. Both the keystore and properties file are ignored by Git. Back them up in a password manager or other secure storage. Enroll in Play App Signing and upload the resulting app bundle as an upload-key-signed artifact.
+
+Before testing Google Sign-In with a release build, register the upload key's SHA-1 and SHA-256 fingerprints on the `com.tori.pulse` Android app in Firebase. After the first Play Console upload, also copy the Play App Signing SHA-1 and SHA-256 fingerprints from **App integrity** into the same Firebase app. Download a fresh `google-services.json` after any OAuth configuration change and rebuild the bundle.
 
 ## Build and verify
 
@@ -48,7 +50,7 @@ Verify both public URLs in a signed-out browser before entering them in Play Con
 
 **App name**
 
-PulseNotes
+JotCue
 
 **Short description**
 
@@ -56,7 +58,7 @@ Turn notes into tasks and reminders, with smart scheduling and offline access.
 
 **Full description**
 
-PulseNotes keeps notes, tasks, and reminders together in one focused workspace.
+JotCue keeps notes, tasks, and reminders together in one focused workspace.
 
 - Write and organize notes with tags, colors, images, and pinned items.
 - Turn lines in a note into trackable tasks.
@@ -65,7 +67,7 @@ PulseNotes keeps notes, tasks, and reminders together in one focused workspace.
 - Keep working when your connection drops and sync changes when you reconnect.
 - Personalize the app theme and default note tag.
 
-Your content is tied to your account so it stays available across supported devices. PulseNotes includes an in-app privacy policy and permanent account-deletion controls.
+Your content is tied to your account so it stays available across supported devices. JotCue includes an in-app privacy policy and permanent account-deletion controls.
 
 ## Play Console declarations
 
@@ -97,4 +99,5 @@ Review this against the final production behavior before submitting:
 - Build the Flutter web app and deploy Firebase Hosting so the privacy and deletion URLs are live.
 - Deploy the updated Firestore and Storage rules before testing account deletion.
 - Test sign-up, login, offline edits, notification permission denial/retry, exact-alarm access, reminder delivery after reboot, image upload, and account deletion on a physical Android device.
+- Test Google Sign-In from both a locally signed release build and a Play internal-testing install; they use different signing certificates.
 - Use Play Console pre-launch reports and resolve crashes, ANRs, accessibility warnings, and policy issues before promoting beyond testing.

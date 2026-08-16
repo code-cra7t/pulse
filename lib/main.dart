@@ -24,7 +24,14 @@ Future<void> main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   _configureFirestore();
   final notificationsService = LocalNotificationsService(notificationsPlugin);
-  await notificationsService.initialize();
+  try {
+    await notificationsService.initialize();
+  } catch (error, stackTrace) {
+    debugPrint(
+      '[Startup] Local notifications could not be initialized: '
+      '$error\n$stackTrace',
+    );
+  }
 
   runApp(
     ProviderScope(
@@ -36,7 +43,7 @@ Future<void> main() async {
           notificationsService,
         ),
       ],
-      child: const PulseNotesApp(),
+      child: const JotCueApp(),
     ),
   );
 }
@@ -53,13 +60,13 @@ void _configureFirestore() {
   }
 }
 
-class PulseNotesApp extends ConsumerWidget {
-  const PulseNotesApp({super.key});
+class JotCueApp extends ConsumerWidget {
+  const JotCueApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
-      title: 'PulseNotes',
+      title: 'JotCue',
       scaffoldMessengerKey: rootScaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.build(),

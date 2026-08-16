@@ -12,6 +12,7 @@ class Reminder {
     required this.scheduledAt,
     required this.isCompleted,
     required this.repeat,
+    this.repeatIntervalMinutes,
     required this.notificationId,
     required this.createdAt,
     required this.updatedAt,
@@ -25,6 +26,7 @@ class Reminder {
   final DateTime scheduledAt;
   final bool isCompleted;
   final RepeatType repeat;
+  final int? repeatIntervalMinutes;
   final int notificationId;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -42,6 +44,7 @@ class Reminder {
           (data['scheduledAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isCompleted: data['isCompleted'] as bool? ?? false,
       repeat: RepeatType.fromValue(data['repeat'] as String?),
+      repeatIntervalMinutes: data['repeatIntervalMinutes'] as int?,
       notificationId: data['notificationId'] as int? ?? 0,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -57,6 +60,7 @@ class Reminder {
       'scheduledAt': Timestamp.fromDate(scheduledAt),
       'isCompleted': isCompleted,
       'repeat': repeat.value,
+      'repeatIntervalMinutes': repeatIntervalMinutes,
       'notificationId': notificationId,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
@@ -72,6 +76,7 @@ class Reminder {
     DateTime? scheduledAt,
     bool? isCompleted,
     RepeatType? repeat,
+    Object? repeatIntervalMinutes = _unsetRepeatInterval,
     int? notificationId,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -87,6 +92,10 @@ class Reminder {
       scheduledAt: scheduledAt ?? this.scheduledAt,
       isCompleted: isCompleted ?? this.isCompleted,
       repeat: repeat ?? this.repeat,
+      repeatIntervalMinutes:
+          identical(repeatIntervalMinutes, _unsetRepeatInterval)
+          ? this.repeatIntervalMinutes
+          : repeatIntervalMinutes as int?,
       notificationId: notificationId ?? this.notificationId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -95,3 +104,4 @@ class Reminder {
 }
 
 const _unsetTaskLineIndex = Object();
+const _unsetRepeatInterval = Object();

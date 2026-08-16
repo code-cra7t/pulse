@@ -1,11 +1,26 @@
-# PulseNotes QA Checklist
+# JotCue QA Checklist
 
 Run the Windows checks on a packaged or normally launched desktop build and
 repeat the shared checks on Android before release.
 
+## Visual review completed — August 15, 2026
+
+- [x] Web onboarding, sign-in, and sign-up reviewed at 390 x 844 and 1440 x 900.
+- [x] Notes home exercised at 320 x 700, 390 x 844 dark mode, and 699 x 900.
+- [x] Adaptive navigation exercised at phone, tablet, 1100 px desktop, and 1400 px desktop widths.
+- [x] Native Windows notes list, editor, settings, and About views reviewed in the release build.
+- [x] Profile reviewed at 320 px, 390 px, 562 px native Windows, and embedded desktop widths.
+- [x] Android launcher and splash resources verified by a successful APK build.
+- [x] Web manifest, icons, title, loading splash, and install colors reviewed in the release build.
+- [ ] Repeat the visual review on a physical Android device before Play submission.
+- [ ] Review iPhone, iPad, and macOS builds on Apple hardware with Xcode before release.
+
 ## Auth
 
 - [ ] Sign up with email and password.
+- [ ] Sign in with Google on Android, iOS, macOS, web, and Windows.
+- [ ] Cancel Google account selection and confirm the app remains usable without a false error.
+- [ ] Install from Play internal testing and confirm Google Sign-In works with the Play App Signing certificate.
 - [ ] Log out and confirm the confirmation dialog appears.
 - [ ] Log back in and confirm the notes screen loads.
 - [ ] Restart the app and confirm the authenticated session is restored.
@@ -83,6 +98,6 @@ repeat the shared checks on Android before release.
 ## Web Limitations
 
 - [ ] Confirm notes, tags, and byte-based image uploads work in a browser.
-- [ ] Confirm reminders show only in-app alerts while PulseNotes is open.
+- [ ] Confirm reminders show only in-app alerts while JotCue is open.
 - [ ] Do not expect `zonedSchedule`, system-tray notifications, or closed-app web push.
 - [ ] Track web push notifications as a future enhancement.

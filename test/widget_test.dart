@@ -2,11 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 
 void main() {
-  testWidgets('pulse smoke test', (WidgetTester tester) async {
+  testWidgets('JotCue smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: Text('PulseNotes'))),
+      const MaterialApp(home: Scaffold(body: Text('JotCue'))),
     );
 
-    expect(find.text('PulseNotes'), findsOneWidget);
+    expect(find.text('JotCue'), findsOneWidget);
   });
 }

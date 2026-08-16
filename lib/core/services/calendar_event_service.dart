@@ -25,6 +25,7 @@ class CalendarEventService {
       RepeatType.none => null,
       RepeatType.daily => Recurrence(frequency: Frequency.daily),
       RepeatType.weekly => Recurrence(frequency: Frequency.weekly),
+      RepeatType.interval => null,
     };
   }
 }

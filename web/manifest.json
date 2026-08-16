@@ -1,11 +1,11 @@
 {
-    "name": "PulseNotes",
-    "short_name": "PulseNotes",
+    "name": "JotCue",
+    "short_name": "JotCue",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#FFF7EF",
-    "theme_color": "#F2B36D",
-    "description": "PulseNotes. Turn anything into a reminder automatically.",
+    "background_color": "#1D1B18",
+    "theme_color": "#1D1B18",
+    "description": "JotCue. Jot it down. We'll cue the rest.",
     "prefer_related_applications": false,
     "icons": [
         {

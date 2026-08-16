@@ -4,10 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/app_theme.dart';
 import '../providers/auth_providers.dart';
+import 'auth_shell.dart';
 import 'signup_screen.dart';
+import 'widgets/google_sign_in_button.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.onBack});
+
+  final VoidCallback? onBack;
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -18,6 +22,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isSubmitting = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -32,10 +37,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    setState(() {
-      _isSubmitting = true;
-    });
-
+    setState(() => _isSubmitting = true);
     try {
       await ref
           .read(authServiceProvider)
@@ -47,12 +49,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _showMessage('Signed in.');
       }
     } on FirebaseAuthException catch (error) {
-      _showMessage(error.message ?? 'Login failed.');
+      _showMessage(error.message ?? 'Sign in failed.');
     } finally {
       if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
+        setState(() => _isSubmitting = false);
       }
     }
   }
@@ -65,105 +65,87 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Welcome back',
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      'Sign in to manage your notes, tasks, and reminders.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text(
-                              'Sign in',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            TextFormField(
-                              controller: _emailController,
-                              keyboardType: TextInputType.emailAddress,
-                              autofillHints: const [AutofillHints.email],
-                              decoration: const InputDecoration(
-                                labelText: 'Email',
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Enter your email.';
-                                }
-
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            TextFormField(
-                              controller: _passwordController,
-                              obscureText: true,
-                              autofillHints: const [AutofillHints.password],
-                              decoration: const InputDecoration(
-                                labelText: 'Password',
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Enter your password.';
-                                }
-
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: AppSpacing.lg),
-                            FilledButton(
-                              onPressed: _isSubmitting ? null : _login,
-                              child: _isSubmitting
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Text('Login'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    TextButton(
-                      onPressed: _isSubmitting
-                          ? null
-                          : () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const SignupScreen(),
-                                ),
-                              );
-                            },
-                      child: const Text('Create an account'),
-                    ),
-                  ],
-                ),
+    return AuthShell(
+      onBack: widget.onBack,
+      title: 'Welcome back',
+      subtitle: 'Pick up your notes, tasks, and reminders where you left off.',
+      footer: TextButton(
+        onPressed: _isSubmitting
+            ? null
+            : () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const SignupScreen()),
+                );
+              },
+        child: const Text('New to JotCue? Create an account'),
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Sign in',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
               ),
             ),
-          ),
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.email],
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                prefixIcon: Icon(Icons.mail_outline_rounded),
+              ),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Enter your email.'
+                  : null,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
+              controller: _passwordController,
+              obscureText: _obscurePassword,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.password],
+              decoration: InputDecoration(
+                labelText: 'Password',
+                prefixIcon: const Icon(Icons.lock_outline_rounded),
+                suffixIcon: IconButton(
+                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
+                  icon: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
+                ),
+              ),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Enter your password.'
+                  : null,
+              onFieldSubmitted: (_) => _login(),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            FilledButton.icon(
+              onPressed: _isSubmitting ? null : _login,
+              icon: _isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.arrow_forward_rounded),
+              label: const Text('Sign in'),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            const GoogleSignInButton(),
+          ],
         ),
       ),
     );

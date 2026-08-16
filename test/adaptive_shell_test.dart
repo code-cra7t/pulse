@@ -15,7 +15,7 @@ void main() {
           selectedIndex: 0,
           onDestinationSelected: (_) {},
           onCreate: () {},
-          profileName: 'Pulse User',
+          profileName: 'JotCue User',
           body: const Center(child: Text('Main content')),
           desktopList: const Center(child: Text('Desktop notes list')),
           desktopEditor: const Center(child: Text('Desktop editor')),
@@ -31,6 +31,15 @@ void main() {
     expect(find.text('Main content'), findsOneWidget);
     expect(find.text('Today'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
+  });
+
+  testWidgets('narrow mobile navigation prioritizes icons', (tester) async {
+    await pumpShell(tester, 320);
+
+    expect(find.byType(FloatingBottomNav), findsOneWidget);
+    expect(find.text('Today'), findsNothing);
+    expect(find.text('Reminders'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('tablet uses sidebar with main content', (tester) async {
@@ -55,7 +64,7 @@ void main() {
   testWidgets('minimum desktop width does not squeeze panes', (tester) async {
     await pumpShell(tester, 1100);
 
-    expect(find.text('PulseNotes'), findsOneWidget);
+    expect(find.text('JotCue'), findsOneWidget);
     expect(find.text('Desktop notes list'), findsOneWidget);
     expect(find.text('Desktop editor'), findsOneWidget);
     expect(tester.takeException(), isNull);

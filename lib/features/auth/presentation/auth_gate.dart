@@ -4,11 +4,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/jotcue_brand.dart';
 import '../../notes/presentation/notes_home_screen.dart';
 import '../../profile/providers/user_profile_providers.dart';
+import '../../reminders/providers/reminders_providers.dart';
 import '../../settings/providers/user_settings_providers.dart';
 import '../providers/auth_providers.dart';
 import 'login_screen.dart';
+import 'signup_screen.dart';
 import 'welcome_screen.dart';
 
 class AuthGate extends ConsumerStatefulWidget {
@@ -30,13 +33,20 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       data: (user) {
         if (user == null) {
           if (_showLogin) {
-            return const LoginScreen();
+            return LoginScreen(
+              onBack: () => setState(() => _showLogin = false),
+            );
           }
           return WelcomeScreen(
             onStart: () {
-              setState(() {
-                _showLogin = true;
-              });
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (context) => const SignupScreen(),
+                ),
+              );
+            },
+            onSignIn: () {
+              setState(() => _showLogin = true);
             },
           );
         }
@@ -51,9 +61,9 @@ class _AuthGateState extends ConsumerState<AuthGate> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.note_alt_outlined, size: 48),
+                JotCueMark(size: 56),
                 SizedBox(height: 12),
-                Text('Opening PulseNotes...'),
+                Text('Opening JotCue...'),
               ],
             ),
           ),
@@ -84,6 +94,9 @@ class _AuthGateState extends ConsumerState<AuthGate> {
         ref
             .read(userSettingsRepositoryProvider)
             .createSettingsIfMissing(user.uid),
+        ref
+            .read(remindersServiceProvider)
+            .restoreActiveNotifications(user.uid),
       ]).catchError((error, stackTrace) {
         debugPrint(
           '[AuthGate] event=user_bootstrap_failed uid=${user.uid} '

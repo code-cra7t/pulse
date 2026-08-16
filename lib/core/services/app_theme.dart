@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
+  static const brandInk = Color(0xFF1D1B18);
+  static const darkPanel = Color(0xFF24221F);
   static const background = Color(0xFFF8F5EE);
   static const surface = Color(0xFFFFFDF8);
   static const ink = Color(0xFF292824);
@@ -25,14 +27,12 @@ class AppColors {
 
   static Color canvasFor(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark
-        ? const Color(0xFF1D1B18)
+        ? brandInk
         : background;
   }
 
   static Color panelFor(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark
-        ? const Color(0xFF24221F)
-        : panel;
+    return Theme.of(context).brightness == Brightness.dark ? darkPanel : panel;
   }
 
   static Color panelBorderFor(BuildContext context) {
@@ -260,7 +260,8 @@ class AppTheme {
           seedColor: AppColors.primary,
           brightness: Brightness.dark,
         ).copyWith(
-          primary: AppColors.primarySoft,
+          primary: AppColors.primary,
+          onPrimary: Colors.white,
           secondary: AppColors.mint,
           surface: const Color(0xFF24221F),
           onSurface: const Color(0xFFF8F5EE),
@@ -277,6 +278,9 @@ class AppTheme {
       ),
       appBarTheme: base.appBarTheme.copyWith(
         foregroundColor: colorScheme.onSurface,
+        titleTextStyle: base.textTheme.titleLarge?.copyWith(
+          color: colorScheme.onSurface,
+        ),
       ),
       cardTheme: base.cardTheme.copyWith(color: colorScheme.surface),
       inputDecorationTheme: base.inputDecorationTheme.copyWith(
@@ -299,8 +303,8 @@ class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(52),
-          foregroundColor: AppColors.ink,
-          backgroundColor: AppColors.primarySoft,
+          foregroundColor: Colors.white,
+          backgroundColor: AppColors.primary,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.md),
           ),

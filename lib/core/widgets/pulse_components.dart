@@ -227,81 +227,90 @@ class FloatingBottomNav extends StatelessWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Positioned.fill(
-                  top: 10,
-                  child: Material(
-                    elevation: 10,
-                    shadowColor: Colors.black.withValues(alpha: 0.13),
-                    color: AppColors.ink,
-                    borderRadius: BorderRadius.circular(28),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _NavItem(
-                            icon: Icons.note_alt_rounded,
-                            label: 'Notes',
-                            selected: selectedIndex == 0,
-                            onTap: () => onDestinationSelected(0),
-                          ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final showLabels = constraints.maxWidth >= 350;
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Positioned.fill(
+                      top: 10,
+                      child: Material(
+                        elevation: 10,
+                        shadowColor: Colors.black.withValues(alpha: 0.13),
+                        color: AppColors.ink,
+                        borderRadius: BorderRadius.circular(28),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _NavItem(
+                                icon: Icons.note_alt_rounded,
+                                label: 'Notes',
+                                showLabel: showLabels,
+                                selected: selectedIndex == 0,
+                                onTap: () => onDestinationSelected(0),
+                              ),
+                            ),
+                            Expanded(
+                              child: _NavItem(
+                                icon: Icons.light_mode_outlined,
+                                label: 'Today',
+                                showLabel: showLabels,
+                                selected: selectedIndex == 1,
+                                onTap: () => onDestinationSelected(1),
+                              ),
+                            ),
+                            const SizedBox(width: 72),
+                            Expanded(
+                              child: _NavItem(
+                                icon: Icons.notifications_none_rounded,
+                                label: 'Reminders',
+                                showLabel: showLabels,
+                                selected: selectedIndex == 2,
+                                onTap: () => onDestinationSelected(2),
+                              ),
+                            ),
+                            Expanded(
+                              child: _NavItem(
+                                icon: Icons.settings_outlined,
+                                label: 'Settings',
+                                showLabel: showLabels,
+                                selected: selectedIndex == 3,
+                                onTap: () => onDestinationSelected(3),
+                              ),
+                            ),
+                          ],
                         ),
-                        Expanded(
-                          child: _NavItem(
-                            icon: Icons.light_mode_outlined,
-                            label: 'Today',
-                            selected: selectedIndex == 1,
-                            onTap: () => onDestinationSelected(1),
-                          ),
-                        ),
-                        const SizedBox(width: 72),
-                        Expanded(
-                          child: _NavItem(
-                            icon: Icons.notifications_none_rounded,
-                            label: 'Reminders',
-                            selected: selectedIndex == 2,
-                            onTap: () => onDestinationSelected(2),
-                          ),
-                        ),
-                        Expanded(
-                          child: _NavItem(
-                            icon: Icons.settings_outlined,
-                            label: 'Settings',
-                            selected: selectedIndex == 3,
-                            onTap: () => onDestinationSelected(3),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-                Positioned(
-                  top: 0,
-                  child: Semantics(
-                    button: true,
-                    label: 'Create note',
-                    child: Material(
-                      elevation: 8,
-                      color: AppColors.primary,
-                      shape: const CircleBorder(),
-                      child: InkWell(
-                        onTap: onCreate,
-                        customBorder: const CircleBorder(),
-                        child: const SizedBox(
-                          width: 64,
-                          height: 64,
-                          child: Icon(
-                            Icons.add_rounded,
-                            color: Colors.white,
-                            size: 32,
+                    Positioned(
+                      top: 0,
+                      child: Semantics(
+                        button: true,
+                        label: 'Create note',
+                        child: Material(
+                          elevation: 8,
+                          color: AppColors.primary,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            onTap: onCreate,
+                            customBorder: const CircleBorder(),
+                            child: const SizedBox(
+                              width: 64,
+                              height: 64,
+                              child: Icon(
+                                Icons.add_rounded,
+                                color: Colors.white,
+                                size: 32,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -314,12 +323,14 @@ class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.icon,
     required this.label,
+    required this.showLabel,
     required this.selected,
     required this.onTap,
   });
 
   final IconData icon;
   final String label;
+  final bool showLabel;
   final bool selected;
   final VoidCallback onTap;
 
@@ -333,13 +344,18 @@ class _NavItem extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(icon, size: 22, color: color),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: color),
-          ),
+          if (showLabel) ...[
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.fade,
+              softWrap: false,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: color),
+            ),
+          ],
         ],
       ),
     );

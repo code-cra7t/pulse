@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.tori" "\0"
-            VALUE "FileDescription", "pulse" "\0"
+            VALUE "FileDescription", "JotCue" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "pulse" "\0"
+            VALUE "InternalName", "JotCue" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.tori. All rights reserved." "\0"
-            VALUE "OriginalFilename", "pulse.exe" "\0"
-            VALUE "ProductName", "pulse" "\0"
+            VALUE "OriginalFilename", "JotCue.exe" "\0"
+            VALUE "ProductName", "JotCue" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -6,8 +6,19 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.698582903261-9npfd24vsdummj0719lto6umj3q5di02</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleDisplayName</key>
-	<string>Pulse</string>
+	<string>JotCue</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +26,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>pulse</string>
+	<string>JotCue</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -24,12 +35,16 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>GIDClientID</key>
+	<string>698582903261-9npfd24vsdummj0719lto6umj3q5di02.apps.googleusercontent.com</string>
+	<key>GIDServerClientID</key>
+	<string>698582903261-5jphjcagqpt8g10s917aqkj108bomcaq.apps.googleusercontent.com</string>
 	<key>NSUserNotificationUsageDescription</key>
-	<string>PulseNotes uses notifications for note reminders.</string>
+	<string>JotCue uses notifications for note reminders.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>PulseNotes adds reminders to your calendar so they also appear on your device.</string>
+	<string>JotCue adds reminders to your calendar so they also appear on your device.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>PulseNotes may open the calendar app when adding reminder events.</string>
+	<string>JotCue may open the calendar app when adding reminder events.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

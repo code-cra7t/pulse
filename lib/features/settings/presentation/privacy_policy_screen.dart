@@ -20,34 +20,34 @@ class PrivacyPolicyScreen extends StatelessWidget {
               Text('Effective August 6, 2026'),
               SizedBox(height: AppSpacing.lg),
               _PolicySection(
-                title: 'Information PulseNotes handles',
+                title: 'Information JotCue handles',
                 body:
-                    'PulseNotes stores the email address used for your account, your display name and optional profile photo, plus the notes, tasks, reminders, settings, and images you choose to create. A local copy of notes and pending changes is kept on your device so the app can work offline.',
+                    'JotCue stores the email address used for your account, your display name and optional profile photo, plus the notes, tasks, reminders, settings, and images you choose to create. A local copy of notes and pending changes is kept on your device so the app can work offline.',
               ),
               _PolicySection(
                 title: 'How information is used',
                 body:
-                    'This information is used only to provide account access, synchronize your content, show reminders, save your preferences, and support the features you request. PulseNotes does not sell personal information and does not include advertising SDKs.',
+                    'This information is used only to provide account access, synchronize your content, show reminders, save your preferences, and support the features you request. JotCue does not sell personal information and does not include advertising SDKs.',
               ),
               _PolicySection(
                 title: 'Service providers and security',
                 body:
-                    'PulseNotes uses Google Firebase for authentication, database storage, and uploaded-file storage. Data is encrypted in transit. Access controls limit cloud content to the signed-in account.',
+                    'JotCue uses Google Firebase for authentication, database storage, and uploaded-file storage. Data is encrypted in transit. Access controls limit cloud content to the signed-in account.',
               ),
               _PolicySection(
                 title: 'Notifications and calendar',
                 body:
-                    'Reminder notifications are scheduled on your device after you grant permission. Adding a reminder to your calendar opens the device calendar flow and happens only when you request it; PulseNotes does not read your calendar.',
+                    'Reminder notifications are scheduled on your device after you grant permission. Adding a reminder to your calendar opens the device calendar flow and happens only when you request it; JotCue does not read your calendar.',
               ),
               _PolicySection(
                 title: 'Deletion and retention',
                 body:
-                    'You can permanently delete your account and associated cloud and local app data from Settings > Account > Delete account. Scheduled PulseNotes notifications are also canceled. You can access the same deletion flow through the PulseNotes web app.',
+                    'You can permanently delete your account and associated cloud and local app data from Settings > Account > Delete account. Scheduled JotCue notifications are also canceled. You can access the same deletion flow through the JotCue web app.',
               ),
               _PolicySection(
                 title: 'Privacy requests',
                 body:
-                    'For privacy questions or requests, use the developer contact shown on the PulseNotes Google Play listing. The public policy and deletion instructions are hosted at pulsenotes-c8d82.web.app/privacy.html and pulsenotes-c8d82.web.app/account-deletion.html.',
+                    'For privacy questions or requests, use the developer contact shown on the JotCue Google Play listing. The public policy and deletion instructions are hosted at pulsenotes-c8d82.web.app/privacy.html and pulsenotes-c8d82.web.app/account-deletion.html.',
               ),
             ],
           ),

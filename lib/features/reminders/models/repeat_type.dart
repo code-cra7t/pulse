@@ -1,7 +1,8 @@
 enum RepeatType {
   none,
   daily,
-  weekly;
+  weekly,
+  interval;
 
   String get value => name;
 

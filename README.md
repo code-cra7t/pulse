@@ -1,6 +1,6 @@
-# PulseNotes
+# JotCue
 
-PulseNotes is a cross-platform Flutter note-taking application that turns
+JotCue is a cross-platform Flutter note-taking application that turns
 notes and task phrases into reminders.
 
 ## Current capabilities
@@ -65,7 +65,7 @@ Run the Firebase Emulator Suite before deploying rule changes.
 ## Offline behavior
 
 Android and Apple Firestore SDKs support native persistence. Windows and Linux
-do not, so PulseNotes uses its own Sembast cache and mutation queue across
+do not, so JotCue uses its own Sembast cache and mutation queue across
 every platform. On reconnection, queued note changes are pushed to Firestore
 and remote changes are merged back into the local database.
 

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pulse/features/reminders/data/smart_reminder_parser.dart';
+import 'package:pulse/features/reminders/models/repeat_type.dart';
 
 void main() {
   final parser = SmartReminderParser();
@@ -30,5 +31,42 @@ void main() {
 
     expect(relative!.dateTime, DateTime(2026, 6, 21, 10));
     expect(weekday!.dateTime, DateTime(2026, 6, 22, 9));
+  });
+
+  test('parses relative minutes, days, and natural time phrases', () {
+    final minutes = parser.parse('stretch in 30 minutes', now: reference);
+    final days = parser.parse('submit it in 2 days', now: reference);
+    final tomorrowMorning = parser.parse(
+      'call Nina tomorrow morning',
+      now: reference,
+    );
+    final deadline = parser.parse('finish proposal by Friday', now: reference);
+
+    expect(minutes!.dateTime, DateTime(2026, 6, 21, 8, 30));
+    expect(days!.dateTime, DateTime(2026, 6, 23, 8));
+    expect(tomorrowMorning!.dateTime, DateTime(2026, 6, 22, 9));
+    expect(deadline!.dateTime, DateTime(2026, 6, 26, 17));
+  });
+
+  test('parses interval and recurring schedules', () {
+    final interval = parser.parse(
+      'drink water every 30 minutes',
+      now: reference,
+    );
+    final hourly = parser.parse('hourly check-in', now: reference);
+    final daily = parser.parse('review notes daily at 6pm', now: reference);
+    final weekly = parser.parse(
+      'every Monday at 9am team sync',
+      now: reference,
+    );
+
+    expect(interval!.repeat, RepeatType.interval);
+    expect(interval.repeatIntervalMinutes, 30);
+    expect(interval.dateTime, DateTime(2026, 6, 21, 8, 30));
+    expect(hourly!.repeatIntervalMinutes, 60);
+    expect(daily!.repeat, RepeatType.daily);
+    expect(daily.dateTime, DateTime(2026, 6, 21, 18));
+    expect(weekly!.repeat, RepeatType.weekly);
+    expect(weekly.dateTime, DateTime(2026, 6, 22, 9));
   });
 }

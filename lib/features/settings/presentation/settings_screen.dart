@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/app_theme.dart';
 import '../../../core/services/firebase_providers.dart';
+import '../../../core/widgets/jotcue_brand.dart';
 import '../../../core/widgets/pulse_components.dart';
 import '../../auth/providers/account_deletion_provider.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -78,7 +79,7 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      'Tune PulseNotes without leaving your workspace.',
+                      'Tune JotCue without leaving your workspace.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: AppSpacing.lg),
@@ -103,7 +104,7 @@ class SettingsScreen extends ConsumerWidget {
                         title: Text(
                           profile?.displayName ??
                               user.displayName ??
-                              'PulseNotes User',
+                              'JotCue User',
                         ),
                         subtitle: Text(user.email ?? profile?.email ?? ''),
                         trailing: const Icon(Icons.chevron_right_rounded),
@@ -254,8 +255,8 @@ class SettingsScreen extends ConsumerWidget {
                     title: 'About',
                     children: [
                       const ListTile(
-                        leading: Icon(Icons.auto_awesome_rounded),
-                        title: Text('PulseNotes'),
+                        leading: JotCueMark(size: 38),
+                        title: Text('JotCue'),
                         subtitle: Text(
                           'Notes that become tasks. Tasks that become reminders.\nVersion 1.0.0',
                         ),
@@ -367,7 +368,7 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'This permanently deletes your notes, tasks, reminders, uploaded images, settings, and PulseNotes account. This cannot be undone.',
+                'This permanently deletes your notes, tasks, reminders, uploaded images, settings, and JotCue account. This cannot be undone.',
               ),
               const SizedBox(height: AppSpacing.md),
               TextFormField(

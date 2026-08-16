@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/app_theme.dart';
 import '../providers/auth_providers.dart';
+import 'auth_shell.dart';
+import 'widgets/google_sign_in_button.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -18,6 +20,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _confirmPasswordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isSubmitting = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirmation = true;
 
   @override
   void dispose() {
@@ -33,10 +37,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       return;
     }
 
-    setState(() {
-      _isSubmitting = true;
-    });
-
+    setState(() => _isSubmitting = true);
     try {
       await ref
           .read(authServiceProvider)
@@ -50,12 +51,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         Navigator.of(context).pop();
       }
     } on FirebaseAuthException catch (error) {
-      _showMessage(error.message ?? 'Signup failed.');
+      _showMessage(error.message ?? 'Account creation failed.');
     } finally {
       if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
+        setState(() => _isSubmitting = false);
       }
     }
   }
@@ -68,113 +67,120 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Create account')),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Create your account',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      'Keep your notes and reminders synced across devices.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            TextFormField(
-                              controller: _emailController,
-                              keyboardType: TextInputType.emailAddress,
-                              autofillHints: const [AutofillHints.email],
-                              decoration: const InputDecoration(
-                                labelText: 'Email',
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Enter your email.';
-                                }
-
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            TextFormField(
-                              controller: _passwordController,
-                              obscureText: true,
-                              autofillHints: const [AutofillHints.newPassword],
-                              decoration: const InputDecoration(
-                                labelText: 'Password',
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Enter a password.';
-                                }
-
-                                if (value.trim().length < 6) {
-                                  return 'Use at least 6 characters.';
-                                }
-
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: AppSpacing.md),
-                            TextFormField(
-                              controller: _confirmPasswordController,
-                              obscureText: true,
-                              autofillHints: const [AutofillHints.password],
-                              decoration: const InputDecoration(
-                                labelText: 'Confirm password',
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Confirm your password.';
-                                }
-
-                                if (value.trim() !=
-                                    _passwordController.text.trim()) {
-                                  return 'Passwords do not match.';
-                                }
-
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: AppSpacing.lg),
-                            FilledButton(
-                              onPressed: _isSubmitting ? null : _signup,
-                              child: _isSubmitting
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Text('Signup'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+    return AuthShell(
+      onBack: () => Navigator.of(context).maybePop(),
+      title: 'Create your account',
+      subtitle: 'Keep every thought, task, and cue in sync across devices.',
+      footer: const Text(
+        'Your notes stay private to your account.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: Colors.white60),
+      ),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Start with JotCue',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
               ),
             ),
-          ),
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.email],
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                prefixIcon: Icon(Icons.mail_outline_rounded),
+              ),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Enter your email.'
+                  : null,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
+              controller: _passwordController,
+              obscureText: _obscurePassword,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.newPassword],
+              decoration: InputDecoration(
+                labelText: 'Password',
+                prefixIcon: const Icon(Icons.lock_outline_rounded),
+                helperText: 'At least 6 characters',
+                suffixIcon: IconButton(
+                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
+                  icon: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
+                ),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Enter a password.';
+                }
+                return value.trim().length < 6
+                    ? 'Use at least 6 characters.'
+                    : null;
+              },
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
+              controller: _confirmPasswordController,
+              obscureText: _obscureConfirmation,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.newPassword],
+              decoration: InputDecoration(
+                labelText: 'Confirm password',
+                prefixIcon: const Icon(Icons.verified_user_outlined),
+                suffixIcon: IconButton(
+                  tooltip: _obscureConfirmation
+                      ? 'Show password'
+                      : 'Hide password',
+                  onPressed: () => setState(
+                    () => _obscureConfirmation = !_obscureConfirmation,
+                  ),
+                  icon: Icon(
+                    _obscureConfirmation
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
+                ),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Confirm your password.';
+                }
+                return value.trim() != _passwordController.text.trim()
+                    ? 'Passwords do not match.'
+                    : null;
+              },
+              onFieldSubmitted: (_) => _signup(),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            FilledButton.icon(
+              onPressed: _isSubmitting ? null : _signup,
+              icon: _isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.person_add_alt_1_rounded),
+              label: const Text('Create account'),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            const GoogleSignInButton(),
+          ],
         ),
       ),
     );

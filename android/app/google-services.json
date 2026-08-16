@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "698582903261",
+    "firebase_url": "https://pulsenotes-c8d82-default-rtdb.europe-west1.firebasedatabase.app",
     "project_id": "pulsenotes-c8d82",
     "storage_bucket": "pulsenotes-c8d82.firebasestorage.app"
   },
@@ -12,7 +13,12 @@
           "package_name": "com.example.pulse_notes"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "698582903261-5jphjcagqpt8g10s917aqkj108bomcaq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDx46OodJE18R-TFtroAEf0AY-hlLvMzes"
@@ -20,7 +26,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "698582903261-5jphjcagqpt8g10s917aqkj108bomcaq.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "698582903261-9npfd24vsdummj0719lto6umj3q5di02.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.tori.pulse"
+              }
+            }
+          ]
         }
       }
     },
@@ -31,7 +49,28 @@
           "package_name": "com.tori.pulse"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "698582903261-2mp763einn1ccri9a0s9f8iu11p346ii.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tori.pulse",
+            "certificate_hash": "d8869db16cfb0546ccd1002351869b05a11994e7"
+          }
+        },
+        {
+          "client_id": "698582903261-fvhn0sjd2a775osnp6iivm372sma0ike.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tori.pulse",
+            "certificate_hash": "33600bbc7af733c4df5337016077a477983f16e6"
+          }
+        },
+        {
+          "client_id": "698582903261-5jphjcagqpt8g10s917aqkj108bomcaq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDx46OodJE18R-TFtroAEf0AY-hlLvMzes"
@@ -39,7 +78,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "698582903261-5jphjcagqpt8g10s917aqkj108bomcaq.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "698582903261-9npfd24vsdummj0719lto6umj3q5di02.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.tori.pulse"
+              }
+            }
+          ]
         }
       }
     }

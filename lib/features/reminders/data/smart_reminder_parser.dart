@@ -1,8 +1,17 @@
 import '../models/parsed_reminder.dart';
+import '../models/repeat_type.dart';
 
+/// A small, on-device language helper for common reminder phrasing.
+///
+/// It intentionally produces suggestions only. The UI always asks the user to
+/// confirm before anything is scheduled.
 class SmartReminderParser {
-  static final RegExp _inHoursPattern = RegExp(
-    r'\bin\s+(\d+)\s+hours?\b',
+  static final RegExp _relativePattern = RegExp(
+    r'\bin\s+(\d+)\s+(minutes?|mins?|hours?|hrs?|days?|weeks?)\b',
+    caseSensitive: false,
+  );
+  static final RegExp _intervalPattern = RegExp(
+    r'\bevery\s+(\d+)\s+(minutes?|mins?|hours?|hrs?)\b',
     caseSensitive: false,
   );
   static final RegExp _twelveHourTimePattern = RegExp(
@@ -15,6 +24,11 @@ class SmartReminderParser {
   );
   static final RegExp _contextHourPattern = RegExp(
     r'\bat\s+([01]?\d|2[0-3])(?:[:.]([0-5][0-9]))?\b',
+    caseSensitive: false,
+  );
+  static final RegExp _weekdayPattern = RegExp(
+    r'\b(next|this|on|by)?\s*'
+    r'(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b',
     caseSensitive: false,
   );
 
@@ -31,81 +45,194 @@ class SmartReminderParser {
   ParsedReminder? parse(String input, {DateTime? now}) {
     final reference = now ?? DateTime.now();
     final normalized = input.trim().toLowerCase();
-
-    final inHours = _parseInHours(normalized, reference);
-    if (inHours != null) {
-      return inHours;
-    }
-
-    final nextWeekday = _parseNextWeekday(normalized, reference);
-    if (nextWeekday != null) {
-      return nextWeekday;
-    }
-
-    final todayWithTime = _parseTodayOrTomorrow(normalized, reference);
-    if (todayWithTime != null) {
-      return todayWithTime;
-    }
-
-    final standaloneTime = _parseStandaloneTime(normalized, reference);
-    if (standaloneTime != null) {
-      return standaloneTime;
-    }
-
-    return null;
-  }
-
-  ParsedReminder? _parseInHours(String input, DateTime now) {
-    final match = _inHoursPattern.firstMatch(input);
-    if (match == null) {
+    if (normalized.isEmpty) {
       return null;
     }
 
-    final hours = int.tryParse(match.group(1) ?? '');
-    if (hours == null) {
+    return _parseInterval(normalized, reference) ??
+        _parseRecurringSchedule(normalized, reference) ??
+        _parseRelativeTime(normalized, reference) ??
+        _parseWeekend(normalized, reference) ??
+        _parseWeekday(normalized, reference) ??
+        _parseTodayTomorrowOrNaturalTime(normalized, reference) ??
+        _parseStandaloneTime(normalized, reference);
+  }
+
+  ParsedReminder? _parseInterval(String input, DateTime now) {
+    final intervalMatch = _intervalPattern.firstMatch(input);
+    var minutes = 0;
+    var phrase = '';
+    if (intervalMatch != null) {
+      final amount = int.tryParse(intervalMatch.group(1) ?? '');
+      if (amount == null || amount <= 0) {
+        return null;
+      }
+      final unit = (intervalMatch.group(2) ?? '').toLowerCase();
+      minutes = unit.startsWith('hour') || unit.startsWith('hr')
+          ? amount * 60
+          : amount;
+      phrase = intervalMatch.group(0) ?? '';
+    } else if (input.contains('hourly') || input.contains('every hour')) {
+      minutes = 60;
+      phrase = input.contains('hourly') ? 'hourly' : 'every hour';
+    }
+
+    if (minutes < 15) {
       return null;
     }
 
     return ParsedReminder(
-      dateTime: now.add(Duration(hours: hours)),
+      dateTime: now.add(Duration(minutes: minutes)),
+      matchedPhrase: phrase,
+      repeat: RepeatType.interval,
+      repeatIntervalMinutes: minutes,
+    );
+  }
+
+  ParsedReminder? _parseRecurringSchedule(String input, DateTime now) {
+    final everyWeekday = RegExp(
+      r'\bevery\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b',
+      caseSensitive: false,
+    ).firstMatch(input);
+    if (everyWeekday != null) {
+      final weekdayName = (everyWeekday.group(1) ?? '').toLowerCase();
+      final time = _extractTime(input) ?? _naturalTime(input);
+      final date = _upcomingWeekday(
+        now,
+        _weekdayMap[weekdayName]!,
+        time ?? const _ParsedTime(hour: 9, minute: 0, matchedPhrase: ''),
+      );
+      return ParsedReminder(
+        dateTime: date,
+        matchedPhrase: time == null
+            ? everyWeekday.group(0)!
+            : '${everyWeekday.group(0)} ${time.matchedPhrase}',
+        repeat: RepeatType.weekly,
+      );
+    }
+
+    final daily =
+        input.contains('every day') ||
+        input.contains('daily') ||
+        input.contains('every morning') ||
+        input.contains('every evening');
+    final weekly = input.contains('every week') || input.contains('weekly');
+    if (!daily && !weekly) {
+      return null;
+    }
+
+    final time = _extractTime(input) ?? _naturalTime(input);
+    final defaultTime =
+        time ?? const _ParsedTime(hour: 9, minute: 0, matchedPhrase: '');
+    final todayAtTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      defaultTime.hour,
+      defaultTime.minute,
+    );
+    final scheduled = todayAtTime.isAfter(now)
+        ? todayAtTime
+        : todayAtTime.add(Duration(days: weekly ? 7 : 1));
+    final phrase = daily
+        ? (time == null ? 'daily' : 'daily ${time.matchedPhrase}')
+        : (time == null ? 'weekly' : 'weekly ${time.matchedPhrase}');
+
+    return ParsedReminder(
+      dateTime: scheduled,
+      matchedPhrase: phrase,
+      repeat: daily ? RepeatType.daily : RepeatType.weekly,
+    );
+  }
+
+  ParsedReminder? _parseRelativeTime(String input, DateTime now) {
+    final match = _relativePattern.firstMatch(input);
+    if (match == null) {
+      return null;
+    }
+
+    final amount = int.tryParse(match.group(1) ?? '');
+    if (amount == null || amount <= 0) {
+      return null;
+    }
+    final unit = (match.group(2) ?? '').toLowerCase();
+    final duration = unit.startsWith('min')
+        ? Duration(minutes: amount)
+        : unit.startsWith('hour') || unit.startsWith('hr')
+        ? Duration(hours: amount)
+        : unit.startsWith('day')
+        ? Duration(days: amount)
+        : Duration(days: amount * 7);
+
+    return ParsedReminder(
+      dateTime: now.add(duration),
       matchedPhrase: match.group(0) ?? '',
     );
   }
 
-  ParsedReminder? _parseNextWeekday(String input, DateTime now) {
-    for (final entry in _weekdayMap.entries) {
-      final phrase = 'next ${entry.key}';
-      if (!input.contains(phrase)) {
-        continue;
-      }
-
-      final time = _extractTime(input);
-      final date = _nextWeekday(now, entry.value);
-      final scheduled = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        time?.hour ?? 9,
-        time?.minute ?? 0,
-      );
-
-      return ParsedReminder(
-        dateTime: scheduled,
-        matchedPhrase: time == null ? phrase : '$phrase ${time.matchedPhrase}',
-      );
+  ParsedReminder? _parseWeekend(String input, DateTime now) {
+    if (!input.contains('weekend')) {
+      return null;
     }
-
-    return null;
+    final time = _extractTime(input) ?? _naturalTime(input);
+    final selectedTime =
+        time ?? const _ParsedTime(hour: 10, minute: 0, matchedPhrase: '');
+    var date = DateTime(now.year, now.month, now.day);
+    while (date.weekday != DateTime.saturday) {
+      date = date.add(const Duration(days: 1));
+    }
+    var scheduled = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      selectedTime.hour,
+      selectedTime.minute,
+    );
+    if (!scheduled.isAfter(now)) {
+      scheduled = scheduled.add(const Duration(days: 7));
+    }
+    return ParsedReminder(
+      dateTime: scheduled,
+      matchedPhrase: time == null
+          ? 'this weekend'
+          : 'this weekend ${time.matchedPhrase}',
+    );
   }
 
-  ParsedReminder? _parseTodayOrTomorrow(String input, DateTime now) {
+  ParsedReminder? _parseWeekday(String input, DateTime now) {
+    final match = _weekdayPattern.firstMatch(input);
+    if (match == null) {
+      return null;
+    }
+    final qualifier = (match.group(1) ?? '').toLowerCase();
+    final weekdayName = (match.group(2) ?? '').toLowerCase();
+    final time = _extractTime(input) ?? _naturalTime(input);
+    final isDeadline = qualifier == 'by';
+    final defaultTime = _ParsedTime(
+      hour: isDeadline ? 17 : 9,
+      minute: 0,
+      matchedPhrase: '',
+    );
+    final selectedTime = time ?? defaultTime;
+    final scheduled = qualifier == 'next'
+        ? _nextWeekday(now, _weekdayMap[weekdayName]!, selectedTime)
+        : _upcomingWeekday(now, _weekdayMap[weekdayName]!, selectedTime);
+    final phrase = match.group(0)!.trim();
+    return ParsedReminder(
+      dateTime: scheduled,
+      matchedPhrase: time == null ? phrase : '$phrase ${time.matchedPhrase}',
+    );
+  }
+
+  ParsedReminder? _parseTodayTomorrowOrNaturalTime(String input, DateTime now) {
     final hasToday = input.contains('today');
     final hasTomorrow = input.contains('tomorrow');
-    if (!hasToday && !hasTomorrow) {
+    final naturalTime = _naturalTime(input);
+    if (!hasToday && !hasTomorrow && naturalTime == null) {
       return null;
     }
 
-    final time = _extractTime(input);
+    final time = _extractTime(input) ?? naturalTime;
     final baseDate = hasTomorrow ? now.add(const Duration(days: 1)) : now;
     final scheduled = DateTime(
       baseDate.year,
@@ -114,17 +241,24 @@ class SmartReminderParser {
       time?.hour ?? now.hour,
       time?.minute ?? now.minute,
     );
-
     final adjusted = scheduled.isAfter(now)
         ? scheduled
-        : now.add(const Duration(hours: 1));
-    final dayPhrase = hasTomorrow ? 'tomorrow' : 'today';
+        : hasToday
+        ? now.add(const Duration(hours: 1))
+        : naturalTime != null
+        ? scheduled.add(const Duration(days: 1))
+        : scheduled;
+    final dayPhrase = hasTomorrow
+        ? 'tomorrow'
+        : hasToday
+        ? 'today'
+        : naturalTime!.matchedPhrase;
 
     return ParsedReminder(
       dateTime: adjusted,
-      matchedPhrase: time == null
-          ? dayPhrase
-          : '$dayPhrase ${time.matchedPhrase}',
+      matchedPhrase: hasToday || hasTomorrow
+          ? (time == null ? dayPhrase : '$dayPhrase ${time.matchedPhrase}')
+          : dayPhrase,
     );
   }
 
@@ -133,7 +267,6 @@ class SmartReminderParser {
     if (time == null) {
       return null;
     }
-
     final scheduled = DateTime(
       now.year,
       now.month,
@@ -141,7 +274,6 @@ class SmartReminderParser {
       time.hour,
       time.minute,
     );
-
     return ParsedReminder(
       dateTime: scheduled.isAfter(now)
           ? scheduled
@@ -150,21 +282,54 @@ class SmartReminderParser {
     );
   }
 
+  _ParsedTime? _naturalTime(String input) {
+    if (input.contains('end of day') || input.contains('eod')) {
+      return const _ParsedTime(
+        hour: 17,
+        minute: 0,
+        matchedPhrase: 'end of day',
+      );
+    }
+    if (input.contains('tonight')) {
+      return const _ParsedTime(hour: 19, minute: 0, matchedPhrase: 'tonight');
+    }
+    if (input.contains('afternoon') || input.contains('after lunch')) {
+      return const _ParsedTime(
+        hour: 15,
+        minute: 0,
+        matchedPhrase: 'this afternoon',
+      );
+    }
+    if (input.contains('evening')) {
+      return const _ParsedTime(
+        hour: 18,
+        minute: 0,
+        matchedPhrase: 'this evening',
+      );
+    }
+    if (input.contains('morning')) {
+      return const _ParsedTime(hour: 9, minute: 0, matchedPhrase: 'morning');
+    }
+    if (input.contains('noon')) {
+      return const _ParsedTime(hour: 12, minute: 0, matchedPhrase: 'noon');
+    }
+    return null;
+  }
+
   _ParsedTime? _extractTime(String input) {
     final twelveHourMatch = _twelveHourTimePattern.firstMatch(input);
     if (twelveHourMatch != null) {
       final rawHour = int.parse(twelveHourMatch.group(1)!);
       final minute = int.tryParse(twelveHourMatch.group(2) ?? '0') ?? 0;
-      final meridiem = (twelveHourMatch.group(3) ?? '').toLowerCase();
-      final hour = _to24Hour(rawHour, meridiem);
-
       return _ParsedTime(
-        hour: hour,
+        hour: _to24Hour(
+          rawHour,
+          (twelveHourMatch.group(3) ?? '').toLowerCase(),
+        ),
         minute: minute,
         matchedPhrase: twelveHourMatch.group(0) ?? '',
       );
     }
-
     final twentyFourHourMatch = _twentyFourHourTimePattern.firstMatch(input);
     if (twentyFourHourMatch != null) {
       return _ParsedTime(
@@ -173,7 +338,6 @@ class SmartReminderParser {
         matchedPhrase: twentyFourHourMatch.group(0) ?? '',
       );
     }
-
     final contextHourMatch = _contextHourPattern.firstMatch(input);
     if (contextHourMatch != null) {
       return _ParsedTime(
@@ -182,7 +346,6 @@ class SmartReminderParser {
         matchedPhrase: contextHourMatch.group(0) ?? '',
       );
     }
-
     return null;
   }
 
@@ -190,22 +353,36 @@ class SmartReminderParser {
     if (meridiem == 'am') {
       return hour == 12 ? 0 : hour;
     }
-
     return hour == 12 ? 12 : hour + 12;
   }
 
-  DateTime _nextWeekday(DateTime now, int weekday) {
+  DateTime _upcomingWeekday(DateTime now, int weekday, _ParsedTime time) {
+    var date = DateTime(now.year, now.month, now.day);
+    while (date.weekday != weekday) {
+      date = date.add(const Duration(days: 1));
+    }
+    final scheduled = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+    return scheduled.isAfter(now)
+        ? scheduled
+        : scheduled.add(const Duration(days: 7));
+  }
+
+  DateTime _nextWeekday(DateTime now, int weekday, _ParsedTime time) {
     var date = DateTime(
       now.year,
       now.month,
       now.day,
     ).add(const Duration(days: 1));
-
     while (date.weekday != weekday) {
       date = date.add(const Duration(days: 1));
     }
-
-    return date;
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 }
 

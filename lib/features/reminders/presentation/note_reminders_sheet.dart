@@ -22,6 +22,8 @@ class NoteRemindersSheet extends ConsumerStatefulWidget {
 
 class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
   DateTime? _selectedDateTime;
+  RepeatType _repeat = RepeatType.none;
+  int _repeatIntervalMinutes = 30;
   bool _isSaving = false;
   bool _isTestingNotification = false;
 
@@ -56,19 +58,70 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
                   _notePreview(widget.note),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: AppColors.textFor(Color(widget.note.color)),
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              OutlinedButton.icon(
-                onPressed: _pickDateTime,
-                icon: const Icon(Icons.schedule),
-                label: Text(
-                  _selectedDateTime == null
-                      ? 'Choose date and time'
-                      : _formatDateTime(_selectedDateTime!),
+              DropdownButtonFormField<RepeatType>(
+                value: _repeat,
+                decoration: const InputDecoration(
+                  labelText: 'Repeat',
+                  prefixIcon: Icon(Icons.repeat_rounded),
                 ),
+                items: const [
+                  DropdownMenuItem(value: RepeatType.none, child: Text('Once')),
+                  DropdownMenuItem(
+                    value: RepeatType.daily,
+                    child: Text('Every day'),
+                  ),
+                  DropdownMenuItem(
+                    value: RepeatType.weekly,
+                    child: Text('Every week'),
+                  ),
+                  DropdownMenuItem(
+                    value: RepeatType.interval,
+                    child: Text('Custom interval'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _repeat = value);
+                  }
+                },
               ),
+              const SizedBox(height: AppSpacing.sm),
+              if (_repeat == RepeatType.interval)
+                AppCard(
+                  color: AppColors.butter,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.timer_outlined),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          'Every ${_intervalLabel(_repeatIntervalMinutes)}\nFirst alert arrives after the interval.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _chooseInterval,
+                        child: const Text('Change'),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                OutlinedButton.icon(
+                  onPressed: _pickDateTime,
+                  icon: const Icon(Icons.schedule),
+                  label: Text(
+                    _selectedDateTime == null
+                        ? 'Choose date and time'
+                        : _formatDateTime(_selectedDateTime!),
+                  ),
+                ),
               const SizedBox(height: AppSpacing.sm),
               FilledButton(
                 onPressed: _isSaving ? null : _createReminder,
@@ -80,8 +133,7 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
                       )
                     : const Text('Add reminder'),
               ),
-              if (!kIsWeb &&
-                  defaultTargetPlatform == TargetPlatform.windows) ...[
+              if (!kIsWeb) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [
@@ -179,7 +231,9 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
   }
 
   Future<void> _createReminder() async {
-    final selectedDateTime = _selectedDateTime;
+    final selectedDateTime = _repeat == RepeatType.interval
+        ? DateTime.now().add(Duration(minutes: _repeatIntervalMinutes))
+        : _selectedDateTime;
     if (selectedDateTime == null) {
       _showMessage('Choose a reminder time first.');
       return;
@@ -208,7 +262,10 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
             noteId: widget.note.id,
             notePreview: _notePreview(widget.note),
             scheduledAt: selectedDateTime,
-            repeat: RepeatType.none,
+            repeat: _repeat,
+            repeatIntervalMinutes: _repeat == RepeatType.interval
+                ? _repeatIntervalMinutes
+                : null,
             notificationId: _notificationId(),
           );
 
@@ -216,7 +273,11 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
         setState(() {
           _selectedDateTime = null;
         });
-        _showMessage('Reminder added.');
+        _showMessage(
+          _repeat == RepeatType.interval
+              ? 'Repeating reminder added.'
+              : 'Reminder added.',
+        );
       }
     } catch (error) {
       _showMessage('Could not create reminder: $error');
@@ -273,6 +334,10 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
   }
 
   Future<void> _editReminder(Reminder reminder) async {
+    if (reminder.repeat == RepeatType.interval) {
+      _showMessage('Delete and recreate interval reminders to change them.');
+      return;
+    }
     final date = await showDatePicker(
       context: context,
       initialDate: reminder.scheduledAt,
@@ -351,6 +416,53 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
 
   int _notificationId() {
     return DateTime.now().microsecondsSinceEpoch.remainder(2147483647);
+  }
+
+  Future<void> _chooseInterval() async {
+    final controller = TextEditingController(text: '$_repeatIntervalMinutes');
+    final minutes = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Repeat interval'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Minutes',
+            helperText: 'Use 15 minutes or more.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text.trim());
+              if (value == null || value < 15) {
+                return;
+              }
+              Navigator.of(dialogContext).pop(value);
+            },
+            child: const Text('Use interval'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (minutes != null && mounted) {
+      setState(() => _repeatIntervalMinutes = minutes);
+    }
+  }
+
+  String _intervalLabel(int minutes) {
+    if (minutes % 60 == 0) {
+      final hours = minutes ~/ 60;
+      return '$hours ${hours == 1 ? 'hour' : 'hours'}';
+    }
+    return '$minutes minutes';
   }
 
   String _notePreview(Note note) {
@@ -440,12 +552,31 @@ class _ReminderTile extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.xs),
             ReminderStatusChip(
-              label: '$scheduledDate at $scheduledTime',
+              label:
+                  '${_repeatLabel(reminder)} | $scheduledDate at $scheduledTime',
               state: state,
             ),
           ],
         ),
       ),
     );
+  }
+
+  String _repeatLabel(Reminder reminder) {
+    return switch (reminder.repeat) {
+      RepeatType.none => 'Once',
+      RepeatType.daily => 'Daily',
+      RepeatType.weekly => 'Weekly',
+      RepeatType.interval =>
+        'Every ${_intervalLabel(reminder.repeatIntervalMinutes ?? 30)}',
+    };
+  }
+
+  String _intervalLabel(int minutes) {
+    if (minutes % 60 == 0) {
+      final hours = minutes ~/ 60;
+      return '$hours ${hours == 1 ? 'hour' : 'hours'}';
+    }
+    return '$minutes min';
   }
 }

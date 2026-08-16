@@ -116,7 +116,7 @@ class UserProfileRepository {
       return email.split('@').first;
     }
 
-    return 'PulseNotes User';
+    return 'JotCue User';
   }
 
   String _safeFileName(String value) {

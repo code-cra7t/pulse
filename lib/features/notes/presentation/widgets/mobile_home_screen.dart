@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/services/app_theme.dart';
+import '../../../../core/widgets/jotcue_brand.dart';
 import '../../../../core/widgets/pulse_components.dart';
 import '../../../reminders/models/reminder.dart';
 import '../../../reminders/models/repeat_type.dart';
@@ -67,7 +68,7 @@ class MobileHomeScreen extends StatelessWidget {
     this.isOnline = true,
     this.emptyTitle = 'No notes yet',
     this.emptyMessage = 'Start by creating your first note.',
-    this.emptyActionLabel = 'New Note',
+    this.emptyActionLabel = 'New note',
   });
 
   final List<Note> notes;
@@ -168,7 +169,7 @@ class MobileHomeScreen extends StatelessWidget {
                     AppSpacing.sm,
                   ),
                   child: SectionHeader(
-                    title: 'All Notes',
+                    title: 'All notes',
                     subtitle: '${notes.length} sorted by recent updates',
                     trailing: Text(
                       'Sort: Updated',
@@ -300,7 +301,7 @@ class _MobileHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('PulseNotes', style: Theme.of(context).textTheme.titleLarge),
+              const JotCueLockup(markSize: 36),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'Good ${_dayPart()}, $displayName',
@@ -908,8 +909,19 @@ class _MobileCardFooter extends StatelessWidget {
     if (count > 1) {
       return '$count reminders';
     }
-    if (reminder.repeat != RepeatType.none) {
-      return reminder.repeat.name;
+    if (reminder.repeat == RepeatType.interval) {
+      final minutes = reminder.repeatIntervalMinutes ?? 30;
+      if (minutes % 60 == 0) {
+        final hours = minutes ~/ 60;
+        return 'Every $hours ${hours == 1 ? 'hour' : 'hours'}';
+      }
+      return 'Every $minutes min';
+    }
+    if (reminder.repeat == RepeatType.daily) {
+      return 'Daily';
+    }
+    if (reminder.repeat == RepeatType.weekly) {
+      return 'Weekly';
     }
     return MaterialLocalizations.of(
       context,

@@ -17,6 +17,10 @@ class LocalNotificationsService {
   static const String _snoozeActionId = 'snooze';
   static const String _dismissActionId = 'dismiss';
   static const Duration _snoozeDuration = Duration(minutes: 10);
+  static const String _reminderChannelId = 'jotcue_reminder_alerts_v3';
+  static const String _reminderChannelName = 'JotCue reminder alerts';
+  static const String _reminderChannelDescription =
+      'Sound, vibration, and pop-up alerts for JotCue reminders';
 
   final FlutterLocalNotificationsPlugin _plugin;
   final StreamController<String?> _selectedNoteController =
@@ -86,10 +90,10 @@ class LocalNotificationsService {
     await _configureLocalTimezone();
 
     const settings = InitializationSettings(
-      android: AndroidInitializationSettings('@drawable/ic_notification'),
+      android: AndroidInitializationSettings('ic_notification'),
       iOS: DarwinInitializationSettings(),
       windows: WindowsInitializationSettings(
-        appName: 'PulseNotes',
+        appName: 'JotCue',
         appUserModelId: 'Tori.PulseNotes',
         guid: '0d34cd47-729d-4e5f-bbd7-bd7e5a896624',
       ),
@@ -106,6 +110,24 @@ class LocalNotificationsService {
     if (initialized == false) {
       throw StateError('Failed to initialize local notifications.');
     }
+
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(
+          const AndroidNotificationChannel(
+            _reminderChannelId,
+            _reminderChannelName,
+            description: _reminderChannelDescription,
+            importance: Importance.max,
+            playSound: true,
+            enableVibration: true,
+            showBadge: true,
+            audioAttributesUsage: AudioAttributesUsage.alarm,
+          ),
+        );
+
     _initialized = true;
     debugPrint('[Notifications] initialized; timezone=${tz.local.name}');
 
@@ -162,6 +184,7 @@ class LocalNotificationsService {
     required String body,
     required DateTime scheduledAt,
     required RepeatType repeat,
+    int? repeatIntervalMinutes,
     required String noteId,
   }) async {
     final platform = kIsWeb ? 'web' : defaultTargetPlatform.name;
@@ -177,6 +200,7 @@ class LocalNotificationsService {
           body: body,
           scheduledAt: scheduledAt,
           repeat: repeat,
+          repeatIntervalMinutes: repeatIntervalMinutes,
           noteId: noteId,
         );
         debugPrint(
@@ -195,13 +219,28 @@ class LocalNotificationsService {
 
       final readiness = await ensureReady();
       if (!readiness.notificationsAllowed) {
-        throw StateError('Notifications are disabled for PulseNotes.');
+        throw StateError('Notifications are disabled for JotCue.');
       }
       if (!readiness.exactAlarmsAllowed) {
-        throw StateError('Exact alarms are disabled for PulseNotes.');
+        throw StateError('Exact alarms are disabled for JotCue.');
       }
 
-      final scheduledDate = _toTzDateTime(_nextSchedule(scheduledAt, repeat));
+      if (repeat == RepeatType.interval &&
+          (repeatIntervalMinutes == null || repeatIntervalMinutes < 15)) {
+        throw ArgumentError.value(
+          repeatIntervalMinutes,
+          'repeatIntervalMinutes',
+          'Interval reminders must repeat every 15 minutes or more.',
+        );
+      }
+
+      final scheduledDate = _toTzDateTime(
+        _nextSchedule(
+          scheduledAt,
+          repeat,
+          repeatIntervalMinutes: repeatIntervalMinutes,
+        ),
+      );
       debugPrint(
         '[Notifications] scheduling id=$notificationId '
         'at=$scheduledDate timezone=${tz.local.name}',
@@ -209,13 +248,18 @@ class LocalNotificationsService {
 
       final details = NotificationDetails(
         android: AndroidNotificationDetails(
-          'pulse_reminders',
-          'Pulse Reminders',
-          channelDescription: 'Reminder notifications for notes',
+          _reminderChannelId,
+          _reminderChannelName,
+          channelDescription: _reminderChannelDescription,
           icon: 'ic_notification',
           importance: Importance.max,
           priority: Priority.high,
           playSound: true,
+          enableVibration: true,
+          visibility: NotificationVisibility.public,
+          category: AndroidNotificationCategory.reminder,
+          ticker: 'JotCue reminder',
+          audioAttributesUsage: AudioAttributesUsage.alarm,
           actions: <AndroidNotificationAction>[
             const AndroidNotificationAction(
               _snoozeActionId,
@@ -237,6 +281,30 @@ class LocalNotificationsService {
         windows: const WindowsNotificationDetails(),
       );
 
+      final payload = jsonEncode({
+        'notificationId': notificationId,
+        'noteId': noteId,
+        'title': title,
+        'body': body,
+      });
+
+      if (repeat == RepeatType.interval) {
+        await _plugin.periodicallyShowWithDuration(
+          id: notificationId,
+          title: title,
+          body: body,
+          repeatDurationInterval: Duration(minutes: repeatIntervalMinutes!),
+          notificationDetails: details,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          payload: payload,
+        );
+        debugPrint(
+          '[Notifications] event=interval_schedule_success '
+          'notificationId=$notificationId every=$repeatIntervalMinutes minutes',
+        );
+        return;
+      }
+
       await _plugin.zonedSchedule(
         id: notificationId,
         title: title,
@@ -252,13 +320,9 @@ class LocalNotificationsService {
                 RepeatType.none => null,
                 RepeatType.daily => DateTimeComponents.time,
                 RepeatType.weekly => DateTimeComponents.dayOfWeekAndTime,
+                RepeatType.interval => null,
               },
-        payload: jsonEncode({
-          'notificationId': notificationId,
-          'noteId': noteId,
-          'title': title,
-          'body': body,
-        }),
+        payload: payload,
       );
 
       final pendingRequests = await _plugin.pendingNotificationRequests();
@@ -297,17 +361,22 @@ class LocalNotificationsService {
     try {
       await _plugin.show(
         id: id,
-        title: 'PulseNotes test',
-        body: 'Windows notifications are working.',
+        title: 'JotCue alert test',
+        body: 'JotCue alerts are working on this device.',
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
-            'pulse_reminders',
-            'Pulse Reminders',
-            channelDescription: 'Reminder notifications for notes',
+            _reminderChannelId,
+            _reminderChannelName,
+            channelDescription: _reminderChannelDescription,
             icon: 'ic_notification',
             importance: Importance.max,
             priority: Priority.high,
             playSound: true,
+            enableVibration: true,
+            visibility: NotificationVisibility.public,
+            category: AndroidNotificationCategory.reminder,
+            ticker: 'JotCue alert test',
+            audioAttributesUsage: AudioAttributesUsage.alarm,
           ),
           iOS: DarwinNotificationDetails(
             presentAlert: true,
@@ -333,7 +402,7 @@ class LocalNotificationsService {
     final id = DateTime.now().microsecondsSinceEpoch.remainder(2147483647);
     await scheduleReminder(
       notificationId: id,
-      title: 'PulseNotes scheduled test',
+      title: 'JotCue scheduled test',
       body: 'This notification was scheduled 60 seconds ago.',
       scheduledAt: DateTime.now().add(const Duration(seconds: 60)),
       repeat: RepeatType.none,
@@ -375,10 +444,11 @@ class LocalNotificationsService {
       }
       _scheduleWebAlert(
         notificationId: reminder.notificationId,
-        title: 'PulseNotes reminder',
+        title: 'JotCue reminder',
         body: reminder.notePreview,
         scheduledAt: reminder.scheduledAt,
         repeat: reminder.repeat,
+        repeatIntervalMinutes: reminder.repeatIntervalMinutes,
         noteId: reminder.noteId,
       );
     }
@@ -394,10 +464,15 @@ class LocalNotificationsService {
     required String body,
     required DateTime scheduledAt,
     required RepeatType repeat,
+    int? repeatIntervalMinutes,
     required String noteId,
   }) {
     _webTimers.remove(notificationId)?.cancel();
-    final next = _nextSchedule(scheduledAt, repeat);
+    final next = _nextSchedule(
+      scheduledAt,
+      repeat,
+      repeatIntervalMinutes: repeatIntervalMinutes,
+    );
     final delay = next.difference(DateTime.now());
     debugPrint('[Notifications] web in-app alert id=$notificationId at=$next');
     _webTimers[notificationId] = Timer(
@@ -419,6 +494,7 @@ class LocalNotificationsService {
             body: body,
             scheduledAt: next,
             repeat: repeat,
+            repeatIntervalMinutes: repeatIntervalMinutes,
             noteId: noteId,
           );
         }
@@ -426,7 +502,11 @@ class LocalNotificationsService {
     );
   }
 
-  DateTime _nextSchedule(DateTime scheduledAt, RepeatType repeat) {
+  DateTime _nextSchedule(
+    DateTime scheduledAt,
+    RepeatType repeat, {
+    int? repeatIntervalMinutes,
+  }) {
     final now = DateTime.now();
     var next = scheduledAt;
 
@@ -438,9 +518,14 @@ class LocalNotificationsService {
     }
 
     while (!next.isAfter(now)) {
-      next = repeat == RepeatType.daily
-          ? next.add(const Duration(days: 1))
-          : next.add(const Duration(days: 7));
+      next = switch (repeat) {
+        RepeatType.daily => next.add(const Duration(days: 1)),
+        RepeatType.weekly => next.add(const Duration(days: 7)),
+        RepeatType.interval => next.add(
+          Duration(minutes: repeatIntervalMinutes ?? 30),
+        ),
+        RepeatType.none => next,
+      };
     }
 
     return next;
@@ -520,13 +605,13 @@ class LocalNotificationsService {
       return _NotificationPayload(
         notificationId: data['notificationId'] as int?,
         noteId: data['noteId'] as String? ?? '',
-        title: data['title'] as String? ?? 'PulseNotes reminder',
+        title: data['title'] as String? ?? 'JotCue reminder',
         body: data['body'] as String? ?? '',
       );
     } catch (_) {
       return _NotificationPayload(
         noteId: payload,
-        title: 'PulseNotes reminder',
+        title: 'JotCue reminder',
         body: '',
       );
     }
