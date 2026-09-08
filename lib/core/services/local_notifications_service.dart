@@ -10,6 +10,8 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../../features/reminders/models/repeat_type.dart';
 import '../../features/reminders/models/reminder.dart';
+import '../../features/reminders/models/reminder_text.dart';
+import 'reminder_schedule.dart';
 
 class LocalNotificationsService {
   LocalNotificationsService(this._plugin);
@@ -17,6 +19,10 @@ class LocalNotificationsService {
   static const String _snoozeActionId = 'snooze';
   static const String _dismissActionId = 'dismiss';
   static const Duration _snoozeDuration = Duration(minutes: 10);
+  static const _native = MethodChannel('com.tori.pulse/notifications');
+  bool get _isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  int _snoozeId(int id) => id < 0 ? id : -id - 1;
   static const String _reminderChannelId = 'jotcue_reminder_alerts_v3';
   static const String _reminderChannelName = 'JotCue reminder alerts';
   static const String _reminderChannelDescription =
@@ -133,7 +139,8 @@ class LocalNotificationsService {
 
     final launchDetails = await _plugin.getNotificationAppLaunchDetails();
     if (launchDetails?.didNotificationLaunchApp ?? false) {
-      _handlePayload(launchDetails?.notificationResponse?.payload);
+      final response = launchDetails?.notificationResponse;
+      if (response != null) await _handleNotificationResponse(response);
     }
   }
 
@@ -174,6 +181,7 @@ class LocalNotificationsService {
     _webTimers.clear();
 
     if (!kIsWeb) {
+      if (_isAndroid) await _native.invokeMethod<void>('cancelAllIntervals');
       await _plugin.cancelAll();
     }
   }
@@ -289,6 +297,21 @@ class LocalNotificationsService {
       });
 
       if (repeat == RepeatType.interval) {
+        if (_isAndroid) {
+          // Remove the previous plugin periodic schedule when migrating an ID.
+          await _plugin.cancel(id: notificationId);
+          await _native.invokeMethod<void>('scheduleInterval', {
+            'id': notificationId,
+            'title': title,
+            'body': body,
+            'payload': payload,
+            'scheduledAtMillis': scheduledAt.millisecondsSinceEpoch,
+            'intervalMillis': Duration(
+              minutes: repeatIntervalMinutes!,
+            ).inMilliseconds,
+          });
+          return;
+        }
         await _plugin.periodicallyShowWithDuration(
           id: notificationId,
           title: title,
@@ -311,9 +334,7 @@ class LocalNotificationsService {
         body: body,
         scheduledDate: scheduledDate,
         notificationDetails: details,
-        androidScheduleMode: repeat == RepeatType.none
-            ? AndroidScheduleMode.exactAllowWhileIdle
-            : AndroidScheduleMode.inexactAllowWhileIdle,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         matchDateTimeComponents: defaultTargetPlatform == TargetPlatform.windows
             ? null
             : switch (repeat) {
@@ -410,12 +431,18 @@ class LocalNotificationsService {
     );
   }
 
-  Future<void> cancelReminder(int notificationId) {
+  Future<void> cancelReminder(int notificationId) async {
     if (kIsWeb) {
       _webTimers.remove(notificationId)?.cancel();
-      return Future<void>.value();
+      return;
     }
-    return _plugin.cancel(id: notificationId);
+    if (_isAndroid) {
+      await _native.invokeMethod<void>('cancelInterval', {
+        'id': notificationId,
+      });
+    }
+    await _plugin.cancel(id: notificationId);
+    await _plugin.cancel(id: _snoozeId(notificationId));
   }
 
   void syncWebReminders(Iterable<Reminder> reminders) {
@@ -427,7 +454,8 @@ class LocalNotificationsService {
         .where(
           (reminder) =>
               !reminder.isCompleted &&
-              reminder.scheduledAt.isAfter(DateTime.now()),
+              (reminder.repeat != RepeatType.none ||
+                  reminder.scheduledAt.isAfter(DateTime.now())),
         )
         .toList();
     final activeIds = active.map((reminder) => reminder.notificationId).toSet();
@@ -444,7 +472,9 @@ class LocalNotificationsService {
       }
       _scheduleWebAlert(
         notificationId: reminder.notificationId,
-        title: 'JotCue reminder',
+        title: reminder.title.isEmpty
+            ? reminderTitleFor(noteContent: reminder.notePreview)
+            : reminder.title,
         body: reminder.notePreview,
         scheduledAt: reminder.scheduledAt,
         repeat: reminder.repeat,
@@ -507,28 +537,12 @@ class LocalNotificationsService {
     RepeatType repeat, {
     int? repeatIntervalMinutes,
   }) {
-    final now = DateTime.now();
-    var next = scheduledAt;
-
-    if (repeat == RepeatType.none) {
-      if (!next.isAfter(now)) {
-        return now.add(const Duration(minutes: 1));
-      }
-      return next;
-    }
-
-    while (!next.isAfter(now)) {
-      next = switch (repeat) {
-        RepeatType.daily => next.add(const Duration(days: 1)),
-        RepeatType.weekly => next.add(const Duration(days: 7)),
-        RepeatType.interval => next.add(
-          Duration(minutes: repeatIntervalMinutes ?? 30),
-        ),
-        RepeatType.none => next,
-      };
-    }
-
-    return next;
+    return nextReminderOccurrence(
+      scheduledAt: scheduledAt,
+      repeat: repeat,
+      now: DateTime.now(),
+      repeatIntervalMinutes: repeatIntervalMinutes,
+    );
   }
 
   tz.TZDateTime _toTzDateTime(DateTime value) {
@@ -550,7 +564,36 @@ class LocalNotificationsService {
       return _webTimers.length;
     }
     final pendingRequests = await _plugin.pendingNotificationRequests();
-    return pendingRequests.length;
+    final intervals = _isAndroid
+        ? await _native.invokeMethod<int>('pendingIntervalCount') ?? 0
+        : 0;
+    return pendingRequests.length + intervals;
+  }
+
+  Future<void> openAlertSettings() async {
+    if (_isAndroid) await _native.invokeMethod<void>('openAlertSettings');
+  }
+
+  Future<NotificationAlertStatus> getAlertStatus() async {
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    final channels = await android?.getNotificationChannels();
+    AndroidNotificationChannel? channel;
+    for (final item in channels ?? <AndroidNotificationChannel>[]) {
+      if (item.id == _reminderChannelId) channel = item;
+    }
+    return NotificationAlertStatus(
+      notificationsAllowed:
+          (await android?.areNotificationsEnabled() ?? true) &&
+          channel?.importance != Importance.none,
+      exactAlarmsAllowed:
+          await android?.canScheduleExactNotifications() ?? true,
+      soundEnabled: channel?.playSound,
+      vibrationEnabled: channel?.enableVibration,
+      pendingRequestCount: await _pendingRequestCount(),
+    );
   }
 
   Future<void> _configureLocalTimezone() async {
@@ -575,9 +618,14 @@ class LocalNotificationsService {
         if (payload == null || notificationId == null) {
           return;
         }
-        await _plugin.cancel(id: notificationId);
+        // Removing a delivered alert must not cancel its recurring schedule.
+        if (_isAndroid) {
+          await _native.invokeMethod<void>('dismissAlert', {
+            'id': notificationId,
+          });
+        }
         await scheduleReminder(
-          notificationId: notificationId,
+          notificationId: _snoozeId(notificationId),
           title: payload.title,
           body: payload.body,
           scheduledAt: DateTime.now().add(_snoozeDuration),
@@ -587,7 +635,11 @@ class LocalNotificationsService {
         return;
       case _dismissActionId:
         if (notificationId != null) {
-          await _plugin.cancel(id: notificationId);
+          if (_isAndroid) {
+            await _native.invokeMethod<void>('dismissAlert', {
+              'id': notificationId,
+            });
+          }
         }
         return;
       default:
@@ -649,6 +701,21 @@ class NotificationReadiness {
 
   final bool notificationsAllowed;
   final bool exactAlarmsAllowed;
+  final int pendingRequestCount;
+}
+
+class NotificationAlertStatus {
+  const NotificationAlertStatus({
+    required this.notificationsAllowed,
+    required this.exactAlarmsAllowed,
+    required this.soundEnabled,
+    required this.vibrationEnabled,
+    required this.pendingRequestCount,
+  });
+  final bool notificationsAllowed;
+  final bool exactAlarmsAllowed;
+  final bool? soundEnabled;
+  final bool? vibrationEnabled;
   final int pendingRequestCount;
 }
 

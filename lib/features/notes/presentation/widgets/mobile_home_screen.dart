@@ -655,7 +655,7 @@ class MobileNoteCard extends StatelessWidget {
     final tasks = TaskParser.extractTasks(note.content);
     final activeReminders =
         reminders.where((reminder) => !reminder.isCompleted).toList()
-          ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+          ..sort((a, b) => a.nextScheduledAt.compareTo(b.nextScheduledAt));
     final nextReminder = activeReminders.isEmpty ? null : activeReminders.first;
     final timestamp = note.updatedAt == note.createdAt
         ? note.createdAt
@@ -880,7 +880,7 @@ class _MobileCardFooter extends StatelessWidget {
       final reminder = nextReminder!;
       return ReminderStatusChip(
         label: _reminderLabel(context, reminder, reminders.length),
-        state: reminder.scheduledAt.isBefore(DateTime.now())
+        state: reminder.isMissed
             ? ReminderVisualState.missed
             : ReminderVisualState.scheduled,
       );
@@ -925,6 +925,6 @@ class _MobileCardFooter extends StatelessWidget {
     }
     return MaterialLocalizations.of(
       context,
-    ).formatTimeOfDay(TimeOfDay.fromDateTime(reminder.scheduledAt));
+    ).formatTimeOfDay(TimeOfDay.fromDateTime(reminder.nextScheduledAt));
   }
 }

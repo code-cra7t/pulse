@@ -124,9 +124,10 @@ class SettingsScreen extends ConsumerWidget {
                         ),
                         title: Text(
                           'Delete account',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
                         ),
                         subtitle: const Text(
                           'Permanently delete your account and data.',
@@ -187,6 +188,10 @@ class SettingsScreen extends ConsumerWidget {
                           initialValue: NoteCategory.normalize(
                             effectiveSettings.defaultNoteTag,
                           ),
+                          dropdownColor: Theme.of(context).colorScheme.surface,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
                           decoration: const InputDecoration(
                             labelText: 'Default note tag',
                             prefixIcon: Icon(Icons.label_outline_rounded),
@@ -194,7 +199,14 @@ class SettingsScreen extends ConsumerWidget {
                           items: NoteCategory.defaults.map((tag) {
                             return DropdownMenuItem(
                               value: tag,
-                              child: Text(tag),
+                              child: Text(
+                                tag,
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface,
+                                ),
+                              ),
                             );
                           }).toList(),
                           onChanged: (tag) {

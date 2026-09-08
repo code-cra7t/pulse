@@ -2,6 +2,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/calendar_event_service.dart';
+import '../../../core/services/alarm_handoff_service.dart';
 import '../../../core/services/firebase_providers.dart';
 import '../../../core/services/local_notifications_service.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -22,6 +23,10 @@ final localNotificationsServiceProvider = Provider<LocalNotificationsService>((
 
 final calendarEventServiceProvider = Provider<CalendarEventService>((ref) {
   return CalendarEventService();
+});
+
+final alarmHandoffServiceProvider = Provider<AlarmHandoffService>((ref) {
+  return AlarmHandoffService();
 });
 
 final remindersServiceProvider = Provider<RemindersService>((ref) {
@@ -78,7 +83,9 @@ final nextReminderForNoteProvider =
           return null;
         }
 
-        activeReminders.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+        activeReminders.sort(
+          (a, b) => a.nextScheduledAt.compareTo(b.nextScheduledAt),
+        );
         return activeReminders.first;
       });
     });

@@ -1024,9 +1024,9 @@ class _ReminderSummary extends ConsumerWidget {
     }
 
     final localizations = MaterialLocalizations.of(context);
-    final date = localizations.formatShortDate(nextReminder.scheduledAt);
+    final date = localizations.formatShortDate(nextReminder.nextScheduledAt);
     final time = localizations.formatTimeOfDay(
-      TimeOfDay.fromDateTime(nextReminder.scheduledAt),
+      TimeOfDay.fromDateTime(nextReminder.nextScheduledAt),
     );
 
     final reminderLabel = activeCount == 1 ? 'reminder' : 'reminders';
@@ -1416,9 +1416,20 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                           tooltip: 'Back',
                         ),
                         const SizedBox(width: AppSpacing.xs),
-                        AppChip(
-                          label: _selectedCategory ?? 'No category',
-                          color: Color(_selectedColor),
+                        Flexible(
+                          child: Wrap(
+                            spacing: AppSpacing.xs,
+                            runSpacing: AppSpacing.xs,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              AppChip(
+                                label: _selectedCategory ?? 'No category',
+                              ),
+                              _NoteColorBadge(
+                                tag: NoteColorTag.fromColor(_selectedColor),
+                              ),
+                            ],
+                          ),
                         ),
                         const Spacer(),
                         if (widget.embedded) ...[
@@ -1582,13 +1593,59 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                                     )
                                   : const <TaskReminderSuggestion>[],
                               reminders: taskReminders,
-                              onToggleTask: (task) {
-                                _replaceEditorContent(
-                                  TaskParser.toggleTask(
-                                    _contentController.text,
-                                    task.lineIndex,
-                                  ),
-                                );
+                              onToggleTask: (task) async {
+                                try {
+                                  final linkedReminders = taskReminders
+                                      .where(
+                                        (reminder) =>
+                                            !reminder.isCompleted &&
+                                            reminder.taskLineIndex ==
+                                                task.lineIndex,
+                                      )
+                                      .toList();
+                                  if (!task.isCompleted &&
+                                      linkedReminders.isNotEmpty) {
+                                    var calendarCleaned = true;
+                                    for (final linkedReminder
+                                        in linkedReminders) {
+                                      final cleaned = await ref
+                                          .read(remindersServiceProvider)
+                                          .markReminderCompleted(
+                                            linkedReminder,
+                                            true,
+                                          );
+                                      calendarCleaned =
+                                          cleaned && calendarCleaned;
+                                    }
+                                    if (!mounted) return;
+                                    if (!calendarCleaned) {
+                                      _showMessage(
+                                        'Task updated. Calendar cleanup needs calendar access; it will retry later.',
+                                      );
+                                    }
+                                    if (linkedReminders.any(
+                                      (reminder) =>
+                                          reminder.repeat != RepeatType.none,
+                                    )) {
+                                      _showMessage(
+                                        'Occurrence done. The repeating task stays active.',
+                                      );
+                                      return;
+                                    }
+                                  }
+                                  _replaceEditorContent(
+                                    TaskParser.toggleTask(
+                                      _contentController.text,
+                                      task.lineIndex,
+                                    ),
+                                  );
+                                } catch (error) {
+                                  if (mounted) {
+                                    _showMessage(
+                                      'Could not complete task: $error',
+                                    );
+                                  }
+                                }
                               },
                               onCreateReminder:
                                   _createTaskReminderFromSuggestion,
@@ -1950,6 +2007,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
           .createReminder(
             userId: widget.userId,
             noteId: note.id,
+            title: note.title,
             notePreview: _notePreview(
               note.copyWith(
                 title: _normalizeTitle(_titleController.text),
@@ -2308,7 +2366,7 @@ class _EditorTaskPreview extends StatelessWidget {
   final List<NoteTask> tasks;
   final List<TaskReminderSuggestion> taskSuggestions;
   final List<Reminder> reminders;
-  final ValueChanged<NoteTask> onToggleTask;
+  final Future<void> Function(NoteTask task) onToggleTask;
   final Future<void> Function(NoteTask task, ParsedReminder suggestion)
   onCreateReminder;
   final void Function(
@@ -2335,7 +2393,8 @@ class _EditorTaskPreview extends StatelessWidget {
     };
     final remindersByLine = <int, Reminder>{
       for (final reminder in reminders)
-        if (reminder.taskLineIndex != null) reminder.taskLineIndex!: reminder,
+        if (!reminder.isCompleted && reminder.taskLineIndex != null)
+          reminder.taskLineIndex!: reminder,
     };
 
     return Column(
@@ -2504,6 +2563,9 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
   Map<int, Reminder> _taskRemindersByLine() {
     final map = <int, Reminder>{};
     for (final reminder in widget.reminders) {
+      if (reminder.isCompleted) {
+        continue;
+      }
       final lineIndex = reminder.taskLineIndex;
       if (lineIndex == null) {
         continue;
@@ -2758,7 +2820,7 @@ class _TaskRow extends StatelessWidget {
         ? null
         : reminder!.isCompleted
         ? ReminderVisualState.completed
-        : reminder!.scheduledAt.isBefore(DateTime.now())
+        : reminder!.isMissed
         ? ReminderVisualState.missed
         : ReminderVisualState.scheduled;
     final reminderLabel = reminder == null
@@ -2958,20 +3020,30 @@ class _NoteColorBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final background = Color(tag.color);
+    final foreground = AppColors.textFor(background);
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: tag.accent.withValues(alpha: 0.12),
+          color: background,
+          border: Border.all(color: tag.accent.withValues(alpha: 0.7)),
           borderRadius: BorderRadius.circular(999),
         ),
-        child: Text(
-          tag.label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: tag.accent,
-            fontWeight: FontWeight.w700,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.circle, size: 10, color: tag.accent),
+            const SizedBox(width: 6),
+            Text(
+              tag.label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: foreground,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -95,6 +95,58 @@ repeat the shared checks on Android before release.
 - [ ] Confirm Snooze delays the notification by ten minutes.
 - [ ] Confirm Dismiss removes the notification.
 
+## September 8 tester regression checks
+
+These require a physical Android device; build/unit-test success does not verify
+sound, vibration, Samsung Clock or delivery during device sleep. Record Android
+version, One UI version, JotCue build, notification/channel settings and battery
+mode with failures. Test both an update over the previous tester build and a
+fresh install. Do not clear a tester's existing notes to run these checks.
+
+- [ ] Samsung A54: open Clock from a supported alarm suggestion, confirm the
+  proposed time and task label, save it, then remove the test alarm in Clock.
+- [ ] Future dates/custom recurrence that Clock cannot represent are explained;
+  no incorrect time-only alarm is silently substituted.
+- [ ] Choose System, Light and Dark. Open default-category and reminder-repeat
+  dropdowns; inspect selected/unselected text, dialogs and interval controls.
+- [ ] Select every note colour; verify a named colour indicator changes at once
+  and persists after reopening. Check a narrow screen and enlarged system text.
+- [ ] Create a reminder without optional exports: no calendar or Clock opens.
+  Its notification uses task/note text, and the reminder title is editable.
+- [ ] Run Test now and Test in 60s; verify sound/vibration against the displayed
+  channel settings, and verify the settings link opens the correct channel.
+- [ ] Repeat after deliberately disabling sound or vibration; the app must
+  respect and accurately report the changed setting.
+- [ ] Set an hourly reminder and a custom 90-minute reminder with a future first
+  time. Verify the first alert and two subsequent occurrences with the app closed.
+- [ ] Reopen/edit an unrelated note between interval alerts: the recurrence must
+  stay anchored to its intended schedule rather than restart from app launch.
+- [ ] Repeat recurrence checks with screen locked, battery saver, reboot and
+  device timezone changes. Test daily/weekly wall-clock times across DST.
+- [ ] Snooze one alert: it returns after ten minutes without stopping the repeat
+  series. Dismiss one alert: subsequent occurrences still fire.
+- [ ] Deny notification/exact-alarm permissions: show a useful error instead of
+  claiming a reminder is queued. Grant access and retry without reinstalling.
+- [ ] Distinguish normal app dismissal from Android Settings > Force stop. Record
+  force-stop as an OS limitation and reopen the app before expecting recovery.
+- [ ] Android calendar: opt in, grant calendar access and choose a writable
+  calendar. Check meaningful title, date and recurrence. Export again and verify
+  the same linked event is updated, without duplicates.
+- [ ] Complete a one-time task/reminder: its linked Android calendar entry and
+  pending notification disappear. Unrelated calendar entries remain unchanged.
+- [ ] Complete a recurring occurrence: the next one remains scheduled and shown;
+  Stop repeating cancels the series and removes its linked calendar entry.
+- [ ] Revoke calendar permission then complete/delete an exported reminder. The
+  reminder still completes, a cleanup warning appears, and cleanup retries after
+  restoring access and reopening the app.
+- [ ] Delete a linked event manually, then edit/complete the reminder: no unrelated
+  event is touched. Legacy calendar exports remain manually managed.
+- [ ] On other platforms, calendar handoff is labelled as independently managed;
+  no automatic external-calendar cleanup is promised.
+
+Voice input, semantic search and unattended-task resurfacing are planned in
+`ASSISTANT_ROADMAP.md`; they are not acceptance criteria for this core-fix build.
+
 ## Web Limitations
 
 - [ ] Confirm notes, tags, and byte-based image uploads work in a browser.

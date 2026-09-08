@@ -42,15 +42,21 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'userId', 'noteId', 'taskLineIndex', 'notePreview', 'scheduledAt',
-          'isCompleted', 'repeat', 'notificationId', 'createdAt', 'updatedAt'
+          'isCompleted', 'repeat', 'notificationId', 'createdAt', 'updatedAt',
+          'title', 'repeatIntervalMinutes'
         ])
         && data.userId == request.auth.uid
         && data.noteId is string
         && (data.taskLineIndex is int || data.taskLineIndex == null)
         && data.notePreview is string
+        && (!data.keys().hasAny(['title']) || data.title is string)
         && data.scheduledAt is timestamp
         && data.isCompleted is bool
-        && data.repeat in ['none', 'daily', 'weekly']
+        && data.repeat in ['none', 'daily', 'weekly', 'interval']
+        && (data.repeat == 'interval'
+          ? data.get('repeatIntervalMinutes', null) is int
+            && data.repeatIntervalMinutes >= 15
+          : data.get('repeatIntervalMinutes', null) == null)
         && data.notificationId is int
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;

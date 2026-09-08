@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/services/reminder_schedule.dart';
 
 import 'repeat_type.dart';
 
@@ -8,6 +9,7 @@ class Reminder {
     required this.userId,
     required this.noteId,
     required this.taskLineIndex,
+    this.title = '',
     required this.notePreview,
     required this.scheduledAt,
     required this.isCompleted,
@@ -22,6 +24,7 @@ class Reminder {
   final String userId;
   final String noteId;
   final int? taskLineIndex;
+  final String title;
   final String notePreview;
   final DateTime scheduledAt;
   final bool isCompleted;
@@ -31,6 +34,20 @@ class Reminder {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  DateTime get nextScheduledAt => isCompleted || repeat == RepeatType.none
+      ? scheduledAt
+      : nextReminderOccurrence(
+          scheduledAt: scheduledAt,
+          repeat: repeat,
+          repeatIntervalMinutes: repeatIntervalMinutes,
+          now: DateTime.now(),
+        );
+
+  bool get isMissed =>
+      !isCompleted &&
+      repeat == RepeatType.none &&
+      scheduledAt.isBefore(DateTime.now());
+
   factory Reminder.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? <String, dynamic>{};
 
@@ -39,6 +56,7 @@ class Reminder {
       userId: data['userId'] as String? ?? '',
       noteId: data['noteId'] as String? ?? '',
       taskLineIndex: data['taskLineIndex'] as int?,
+      title: data['title'] as String? ?? '',
       notePreview: data['notePreview'] as String? ?? '',
       scheduledAt:
           (data['scheduledAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -56,6 +74,7 @@ class Reminder {
       'userId': userId,
       'noteId': noteId,
       'taskLineIndex': taskLineIndex,
+      'title': title,
       'notePreview': notePreview,
       'scheduledAt': Timestamp.fromDate(scheduledAt),
       'isCompleted': isCompleted,
@@ -72,6 +91,7 @@ class Reminder {
     String? userId,
     String? noteId,
     Object? taskLineIndex = _unsetTaskLineIndex,
+    String? title,
     String? notePreview,
     DateTime? scheduledAt,
     bool? isCompleted,
@@ -88,6 +108,7 @@ class Reminder {
       taskLineIndex: identical(taskLineIndex, _unsetTaskLineIndex)
           ? this.taskLineIndex
           : taskLineIndex as int?,
+      title: title ?? this.title,
       notePreview: notePreview ?? this.notePreview,
       scheduledAt: scheduledAt ?? this.scheduledAt,
       isCompleted: isCompleted ?? this.isCompleted,

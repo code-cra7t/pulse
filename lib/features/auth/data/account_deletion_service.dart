@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/offline/offline_note_store.dart';
+import '../../../core/services/calendar_event_service.dart';
 import '../../../core/services/local_notifications_service.dart';
 
 class AccountDeletionService {
@@ -11,8 +13,9 @@ class AccountDeletionService {
     this._firestore,
     this._storage,
     this._notifications,
-    this._offlineNotes,
-  );
+    this._offlineNotes, {
+    CalendarEventService? calendar,
+  }) : _calendar = calendar ?? CalendarEventService();
 
   static const int _batchSize = 400;
 
@@ -21,6 +24,7 @@ class AccountDeletionService {
   final FirebaseStorage _storage;
   final LocalNotificationsService _notifications;
   final OfflineNoteStore _offlineNotes;
+  final CalendarEventService _calendar;
 
   Future<void> deleteCurrentAccount({required String password}) async {
     final user = _auth.currentUser;
@@ -38,6 +42,15 @@ class AccountDeletionService {
     await _deleteStorageTree(_storage.ref().child('users/${user.uid}'));
     await _deleteQuery(
       _firestore.collection('reminders').where('userId', isEqualTo: user.uid),
+      beforeDelete: (id) async {
+        try {
+          await _calendar.removeReminderFromCalendar(id);
+        } catch (error) {
+          // Native calendar links retain pending removals for retry. Calendar
+          // permission denial must not prevent deleting the user's account.
+          debugPrint('[Calendar] account cleanup deferred: $error');
+        }
+      },
     );
     await _deleteQuery(
       _firestore.collection('notes').where('userId', isEqualTo: user.uid),
@@ -55,7 +68,10 @@ class AccountDeletionService {
     await user.delete();
   }
 
-  Future<void> _deleteQuery(Query<Map<String, dynamic>> query) async {
+  Future<void> _deleteQuery(
+    Query<Map<String, dynamic>> query, {
+    Future<void> Function(String id)? beforeDelete,
+  }) async {
     while (true) {
       final snapshot = await query.limit(_batchSize).get();
       if (snapshot.docs.isEmpty) {
@@ -64,6 +80,7 @@ class AccountDeletionService {
 
       final batch = _firestore.batch();
       for (final document in snapshot.docs) {
+        await beforeDelete?.call(document.id);
         batch.delete(document.reference);
       }
       await batch.commit();

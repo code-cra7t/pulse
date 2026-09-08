@@ -17,7 +17,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: const [
-              Text('Effective August 6, 2026'),
+              Text('Effective September 8, 2026'),
               SizedBox(height: AppSpacing.lg),
               _PolicySection(
                 title: 'Information JotCue handles',
@@ -37,12 +37,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
               _PolicySection(
                 title: 'Notifications and calendar',
                 body:
-                    'Reminder notifications are scheduled on your device after you grant permission. Adding a reminder to your calendar opens the device calendar flow and happens only when you request it; JotCue does not read your calendar.',
+                    'Reminder notifications are scheduled on your device after you grant permission. Calendar linking is optional. On Android, JotCue requests calendar access to list writable calendars and create, verify, update or remove entries linked to your reminders. Those links stay on this device; JotCue does not upload your calendar contents. Your chosen calendar account may synchronize exported entries through its own provider. On other supported platforms, calendar exports use the device calendar flow and are managed separately. Phone alarms are confirmed and managed in the Clock app.',
               ),
               _PolicySection(
                 title: 'Deletion and retention',
                 body:
-                    'You can permanently delete your account and associated cloud and local app data from Settings > Account > Delete account. Scheduled JotCue notifications are also canceled. You can access the same deletion flow through the JotCue web app.',
+                    'You can permanently delete your account and associated cloud and local app data from Settings > Account > Delete account. Scheduled JotCue notifications are also canceled. JotCue attempts to remove linked calendar entries on this Android device; if calendar access is unavailable, pending cleanup links are retained locally for retry. Entries on other devices, old unlinked exports and phone Clock alarms may need manual removal. You can access the same account deletion flow through the JotCue web app.',
               ),
               _PolicySection(
                 title: 'Privacy requests',

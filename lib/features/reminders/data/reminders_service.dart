@@ -1,11 +1,11 @@
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/services/calendar_event_service.dart';
 import '../../../core/services/local_notifications_service.dart';
+import '../../../core/services/reminder_schedule.dart';
 import '../models/reminder.dart';
+import '../models/reminder_text.dart';
 import '../models/repeat_type.dart';
 
 class RemindersService {
@@ -47,31 +47,40 @@ class RemindersService {
   }
 
   Future<void> restoreActiveNotifications(String userId) async {
+    try {
+      await _calendarEventService.retryPendingRemovals();
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[Calendar] event=retry_cleanup_failure error=$error\n$stackTrace',
+      );
+    }
     final snapshot = await _remindersCollection
         .where('userId', isEqualTo: userId)
         .get();
     final now = DateTime.now();
-    final reminders = snapshot.docs
-        .map(Reminder.fromFirestore)
-        .where(
-          (reminder) =>
-              !reminder.isCompleted &&
-              (reminder.repeat != RepeatType.none ||
-                  reminder.scheduledAt.isAfter(now)),
-        );
+    final reminders = snapshot.docs.map(Reminder.fromFirestore);
 
     for (final reminder in reminders) {
+      if (reminder.isCompleted) {
+        await _removeCalendarLinkBestEffort(reminder.id);
+        continue;
+      }
+      if (reminder.repeat == RepeatType.none &&
+          !reminder.scheduledAt.isAfter(now)) {
+        continue;
+      }
       try {
-        await _notificationsService.cancelReminder(reminder.notificationId);
+        // Replace the primary schedule without deleting an active snooze.
         await _notificationsService.scheduleReminder(
           notificationId: reminder.notificationId,
-          title: 'JotCue reminder',
+          title: _titleFor(reminder),
           body: reminder.notePreview,
           scheduledAt: reminder.scheduledAt,
           repeat: reminder.repeat,
           repeatIntervalMinutes: reminder.repeatIntervalMinutes,
           noteId: reminder.noteId,
         );
+        await _updateCalendarLinkBestEffort(reminder);
       } catch (error, stackTrace) {
         debugPrint(
           '[RemindersService] event=restore_notification_failure '
@@ -81,10 +90,11 @@ class RemindersService {
     }
   }
 
-  Future<void> createReminder({
+  Future<Reminder> createReminder({
     required String userId,
     required String noteId,
     int? taskLineIndex,
+    String? title,
     required String notePreview,
     required DateTime scheduledAt,
     required RepeatType repeat,
@@ -92,6 +102,11 @@ class RemindersService {
     required int notificationId,
   }) async {
     final now = DateTime.now();
+    final resolvedTitle = reminderTitleFor(
+      taskText: taskLineIndex == null ? null : notePreview,
+      noteTitle: title,
+      noteContent: notePreview,
+    );
     debugPrint(
       '[RemindersService] event=create_start noteId=$noteId '
       'notificationId=$notificationId at=$scheduledAt repeat=${repeat.value}',
@@ -100,7 +115,7 @@ class RemindersService {
     try {
       await _notificationsService.scheduleReminder(
         notificationId: notificationId,
-        title: 'JotCue reminder',
+        title: resolvedTitle,
         body: notePreview,
         scheduledAt: scheduledAt,
         repeat: repeat,
@@ -120,10 +135,27 @@ class RemindersService {
     }
 
     try {
-      final document = await _remindersCollection.add({
+      final document = _remindersCollection.doc();
+      final reminder = Reminder(
+        id: document.id,
+        userId: userId,
+        noteId: noteId,
+        taskLineIndex: taskLineIndex,
+        title: resolvedTitle,
+        notePreview: notePreview,
+        scheduledAt: scheduledAt,
+        isCompleted: false,
+        repeat: repeat,
+        repeatIntervalMinutes: repeatIntervalMinutes,
+        notificationId: notificationId,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await document.set({
         'userId': userId,
         'noteId': noteId,
         'taskLineIndex': taskLineIndex,
+        'title': resolvedTitle,
         'notePreview': notePreview,
         'scheduledAt': Timestamp.fromDate(scheduledAt),
         'isCompleted': false,
@@ -137,6 +169,7 @@ class RemindersService {
         '[RemindersService] event=create_success reminderId=${document.id} '
         'notificationId=$notificationId',
       );
+      return reminder;
     } catch (error, stackTrace) {
       debugPrint(
         '[RemindersService] event=firestore_create_failure '
@@ -145,22 +178,20 @@ class RemindersService {
       await _notificationsService.cancelReminder(notificationId);
       rethrow;
     }
+  }
 
-    unawaited(
-      _calendarEventService
-          .addReminderToCalendar(
-            title: 'JotCue reminder',
-            body: notePreview,
-            scheduledAt: scheduledAt,
-            repeat: repeat,
-          )
-          .catchError((Object error) {
-            debugPrint('[Calendar] could not add reminder event: $error');
-          }),
+  Future<void> addReminderToCalendar(Reminder reminder) {
+    return _calendarEventService.addReminderToCalendar(
+      reminderId: reminder.id,
+      title: _titleFor(reminder),
+      body: reminder.notePreview,
+      scheduledAt: reminder.scheduledAt,
+      repeat: reminder.repeat,
+      repeatIntervalMinutes: reminder.repeatIntervalMinutes,
     );
   }
 
-  Future<void> updateReminder(Reminder reminder) async {
+  Future<bool> updateReminder(Reminder reminder) async {
     debugPrint(
       '[RemindersService] event=update_start reminderId=${reminder.id} '
       'notificationId=${reminder.notificationId}',
@@ -169,7 +200,7 @@ class RemindersService {
       await _notificationsService.cancelReminder(reminder.notificationId);
       await _notificationsService.scheduleReminder(
         notificationId: reminder.notificationId,
-        title: 'JotCue reminder',
+        title: _titleFor(reminder),
         body: reminder.notePreview,
         scheduledAt: reminder.scheduledAt,
         repeat: reminder.repeat,
@@ -180,9 +211,11 @@ class RemindersService {
       await _remindersCollection
           .doc(reminder.id)
           .update(reminder.copyWith(updatedAt: DateTime.now()).toMap());
+      final calendarUpdated = await _updateCalendarLinkBestEffort(reminder);
       debugPrint(
         '[RemindersService] event=update_success reminderId=${reminder.id}',
       );
+      return calendarUpdated;
     } catch (error, stackTrace) {
       debugPrint(
         '[RemindersService] event=update_failure reminderId=${reminder.id} '
@@ -195,6 +228,7 @@ class RemindersService {
   Future<void> deleteReminder(Reminder reminder) async {
     await _notificationsService.cancelReminder(reminder.notificationId);
     await _remindersCollection.doc(reminder.id).delete();
+    await _removeCalendarLinkBestEffort(reminder.id);
   }
 
   Future<void> deleteRemindersForNote({
@@ -210,16 +244,20 @@ class RemindersService {
       final reminder = Reminder.fromFirestore(doc);
       await _notificationsService.cancelReminder(reminder.notificationId);
       await doc.reference.delete();
+      await _removeCalendarLinkBestEffort(reminder.id);
     }
   }
 
-  Future<void> markReminderCompleted(Reminder reminder, bool completed) async {
+  Future<bool> markReminderCompleted(Reminder reminder, bool completed) async {
+    if (completed && reminder.repeat != RepeatType.none) {
+      return completeOccurrence(reminder);
+    }
     if (completed) {
       await _notificationsService.cancelReminder(reminder.notificationId);
     } else {
       await _notificationsService.scheduleReminder(
         notificationId: reminder.notificationId,
-        title: 'JotCue reminder',
+        title: _titleFor(reminder),
         body: reminder.notePreview,
         scheduledAt: reminder.scheduledAt,
         repeat: reminder.repeat,
@@ -232,6 +270,32 @@ class RemindersService {
       'isCompleted': completed,
       'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
+    if (completed) {
+      return _removeCalendarLinkBestEffort(reminder.id);
+    }
+    return true;
+  }
+
+  Future<bool> completeOccurrence(Reminder reminder) async {
+    final now = DateTime.now();
+    final next = nextReminderOccurrence(
+      scheduledAt: reminder.scheduledAt,
+      repeat: reminder.repeat,
+      repeatIntervalMinutes: reminder.repeatIntervalMinutes,
+      now: reminder.scheduledAt.isAfter(now) ? reminder.scheduledAt : now,
+    );
+    return updateReminder(reminder.copyWith(scheduledAt: next));
+  }
+
+  Future<bool> stopRepeating(Reminder reminder) async {
+    await _notificationsService.cancelReminder(reminder.notificationId);
+    await _remindersCollection.doc(reminder.id).update({
+      'isCompleted': true,
+      'repeat': RepeatType.none.value,
+      'repeatIntervalMinutes': null,
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
+    });
+    return _removeCalendarLinkBestEffort(reminder.id);
   }
 
   Future<void> refreshReminderPreviewsForNote({
@@ -245,9 +309,14 @@ class RemindersService {
         .get();
 
     for (final doc in snapshot.docs) {
-      final reminder = Reminder.fromFirestore(
-        doc,
-      ).copyWith(notePreview: notePreview, updatedAt: DateTime.now());
+      final existing = Reminder.fromFirestore(doc);
+      if (existing.taskLineIndex != null) {
+        continue;
+      }
+      final reminder = existing.copyWith(
+        notePreview: notePreview,
+        updatedAt: DateTime.now(),
+      );
 
       await doc.reference.update({
         'notePreview': notePreview,
@@ -258,14 +327,59 @@ class RemindersService {
         await _notificationsService.cancelReminder(reminder.notificationId);
         await _notificationsService.scheduleReminder(
           notificationId: reminder.notificationId,
-          title: 'JotCue reminder',
+          title: _titleFor(reminder),
           body: reminder.notePreview,
           scheduledAt: reminder.scheduledAt,
           repeat: reminder.repeat,
           repeatIntervalMinutes: reminder.repeatIntervalMinutes,
           noteId: reminder.noteId,
         );
+        await _updateCalendarLinkBestEffort(reminder);
       }
+    }
+  }
+
+  String _titleFor(Reminder reminder) {
+    return reminder.title.trim().isEmpty
+        ? reminderTitleFor(
+            taskText: reminder.taskLineIndex == null
+                ? null
+                : reminder.notePreview,
+            noteContent: reminder.notePreview,
+          )
+        : reminder.title.trim();
+  }
+
+  Future<bool> _updateCalendarLinkBestEffort(Reminder reminder) async {
+    try {
+      await _calendarEventService.updateLinkedReminder(
+        reminderId: reminder.id,
+        title: _titleFor(reminder),
+        body: reminder.notePreview,
+        scheduledAt: reminder.scheduledAt,
+        repeat: reminder.repeat,
+        repeatIntervalMinutes: reminder.repeatIntervalMinutes,
+      );
+      return true;
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[Calendar] event=linked_update_failure reminderId=${reminder.id} '
+        'error=$error\n$stackTrace',
+      );
+      return false;
+    }
+  }
+
+  Future<bool> _removeCalendarLinkBestEffort(String reminderId) async {
+    try {
+      await _calendarEventService.removeReminderFromCalendar(reminderId);
+      return true;
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[Calendar] event=linked_remove_failure reminderId=$reminderId '
+        'error=$error\n$stackTrace',
+      );
+      return false;
     }
   }
 }

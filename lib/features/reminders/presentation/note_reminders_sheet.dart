@@ -8,6 +8,7 @@ import '../../../core/widgets/pulse_components.dart';
 import '../../notes/models/note.dart';
 import '../../notes/presentation/widgets/note_ui.dart';
 import '../models/reminder.dart';
+import '../models/reminder_text.dart';
 import '../models/repeat_type.dart';
 import '../providers/reminders_providers.dart';
 
@@ -31,6 +32,9 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
   DateTime? _selectedDateTime;
   late RepeatType _repeat;
   late int _repeatIntervalMinutes;
+  late final TextEditingController _titleController;
+  bool _addToCalendar = false;
+  bool _alsoSetPhoneAlarm = false;
   bool _isSaving = false;
   bool _isTestingNotification = false;
 
@@ -39,6 +43,23 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
     super.initState();
     _repeat = widget.initialRepeat;
     _repeatIntervalMinutes = widget.initialIntervalMinutes;
+    if (_repeat == RepeatType.interval) {
+      _selectedDateTime = DateTime.now().add(
+        Duration(minutes: _repeatIntervalMinutes),
+      );
+    }
+    _titleController = TextEditingController(
+      text: reminderTitleFor(
+        noteTitle: widget.note.title,
+        noteContent: widget.note.content,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    super.dispose();
   }
 
   @override
@@ -46,7 +67,11 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
     final remindersAsync = ref.watch(
       noteRemindersStreamProvider(widget.note.id),
     );
-    final reminders = remindersAsync.asData?.value ?? const <Reminder>[];
+    final reminders = (remindersAsync.asData?.value ?? const <Reminder>[])
+        .where((reminder) => !reminder.isCompleted)
+        .toList();
+    final calendar = ref.watch(calendarEventServiceProvider);
+    final alarm = ref.watch(alarmHandoffServiceProvider);
 
     return SafeArea(
       child: Padding(
@@ -78,8 +103,21 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: _titleController,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: 'Reminder title',
+                  prefixIcon: Icon(Icons.title_rounded),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
               DropdownButtonFormField<RepeatType>(
-                value: _repeat,
+                initialValue: _repeat,
+                dropdownColor: Theme.of(context).colorScheme.surface,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
                 decoration: const InputDecoration(
                   labelText: 'Repeat',
                   prefixIcon: Icon(Icons.repeat_rounded),
@@ -101,7 +139,15 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
                 ],
                 onChanged: (value) {
                   if (value != null) {
-                    setState(() => _repeat = value);
+                    setState(() {
+                      _repeat = value;
+                      if (value == RepeatType.interval &&
+                          _selectedDateTime == null) {
+                        _selectedDateTime = DateTime.now().add(
+                          Duration(minutes: _repeatIntervalMinutes),
+                        );
+                      }
+                    });
                   }
                 },
               ),
@@ -111,31 +157,72 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
                   color: AppColors.butter,
                   child: Row(
                     children: [
-                      const Icon(Icons.timer_outlined),
+                      Icon(
+                        Icons.timer_outlined,
+                        color: AppColors.textFor(AppColors.butter),
+                      ),
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Text(
-                          'Every ${_intervalLabel(_repeatIntervalMinutes)}\nFirst alert arrives after the interval.',
-                          style: Theme.of(context).textTheme.bodyMedium,
+                          'Every ${_intervalLabel(_repeatIntervalMinutes)}',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: AppColors.textFor(AppColors.butter),
+                              ),
                         ),
                       ),
                       TextButton(
                         onPressed: _chooseInterval,
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.textFor(AppColors.butter),
+                        ),
                         child: const Text('Change'),
                       ),
                     ],
                   ),
-                )
-              else
-                OutlinedButton.icon(
-                  onPressed: _pickDateTime,
-                  icon: const Icon(Icons.schedule),
-                  label: Text(
-                    _selectedDateTime == null
-                        ? 'Choose date and time'
-                        : _formatDateTime(_selectedDateTime!),
-                  ),
                 ),
+              const SizedBox(height: AppSpacing.sm),
+              OutlinedButton.icon(
+                onPressed: _pickDateTime,
+                icon: const Icon(Icons.schedule),
+                label: Text(
+                  _selectedDateTime == null
+                      ? 'Choose first date and time'
+                      : 'First alert ${_formatDateTime(_selectedDateTime!)}',
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _addToCalendar,
+                onChanged: (value) {
+                  setState(() => _addToCalendar = value ?? false);
+                },
+                title: const Text('Also add to device calendar'),
+                subtitle: Text(
+                  calendar.supportsManagedEvents
+                      ? 'This entry stays linked to the reminder.'
+                      : 'Your calendar app manages this export separately.',
+                ),
+                secondary: const Icon(Icons.calendar_month_outlined),
+              ),
+              if (alarm.isSupported)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _alsoSetPhoneAlarm,
+                  onChanged: (value) {
+                    setState(() => _alsoSetPhoneAlarm = value ?? false);
+                  },
+                  title: const Text('Also set phone alarm'),
+                  subtitle: const Text(
+                    'Opens Clock so you can review and confirm it.',
+                  ),
+                  secondary: const Icon(Icons.alarm_add_outlined),
+                ),
+              Text(
+                'JotCue notifications, Clock alarms, and calendar entries are separate.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               const SizedBox(height: AppSpacing.sm),
               FilledButton(
                 onPressed: _isSaving ? null : _createReminder,
@@ -147,7 +234,7 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
                       )
                     : const Text('Add reminder'),
               ),
-              if (!kIsWeb && kDebugMode) ...[
+              if (!kIsWeb) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [
@@ -171,6 +258,12 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
                   ],
                 ),
               ],
+              if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+                TextButton.icon(
+                  onPressed: _showAlertSettings,
+                  icon: const Icon(Icons.volume_up_outlined),
+                  label: const Text('Sound and vibration settings'),
+                ),
               if (remindersAsync.isLoading)
                 const Padding(
                   padding: EdgeInsets.only(top: AppSpacing.sm),
@@ -199,7 +292,13 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
                             _toggleReminder(reminder, value ?? false);
                           },
                           onEdit: () => _editReminder(reminder),
+                          onStopRepeating: reminder.repeat == RepeatType.none
+                              ? null
+                              : () => _stopRepeating(reminder),
                           onDelete: () => _deleteReminder(reminder),
+                          onAddToCalendar: _isSaving
+                              ? null
+                              : () => _exportReminder(reminder),
                         ),
                       )
                       .toList(),
@@ -245,9 +344,7 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
   }
 
   Future<void> _createReminder() async {
-    final selectedDateTime = _repeat == RepeatType.interval
-        ? DateTime.now().add(Duration(minutes: _repeatIntervalMinutes))
-        : _selectedDateTime;
+    final selectedDateTime = _selectedDateTime;
     if (selectedDateTime == null) {
       _showMessage('Choose a reminder time first.');
       return;
@@ -255,6 +352,16 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
 
     if (!selectedDateTime.isAfter(DateTime.now())) {
       _showMessage('Choose a future time.');
+      return;
+    }
+    if (_alsoSetPhoneAlarm &&
+        (_repeat != RepeatType.none ||
+            !ref
+                .read(alarmHandoffServiceProvider)
+                .canRepresentDate(selectedDateTime))) {
+      _showMessage(
+        'Phone Clock can set the next occurrence of a time. Turn off the phone alarm option for future dates or repeating reminders.',
+      );
       return;
     }
 
@@ -269,11 +376,12 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
     });
 
     try {
-      await ref
+      final reminder = await ref
           .read(remindersServiceProvider)
           .createReminder(
             userId: user.uid,
             noteId: widget.note.id,
+            title: _titleController.text,
             notePreview: _notePreview(widget.note),
             scheduledAt: selectedDateTime,
             repeat: _repeat,
@@ -283,14 +391,38 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
             notificationId: _notificationId(),
           );
 
+      String? followupWarning;
+      if (_addToCalendar) {
+        try {
+          await ref
+              .read(remindersServiceProvider)
+              .addReminderToCalendar(reminder);
+        } catch (error) {
+          followupWarning = 'Calendar export failed: $error';
+        }
+      }
+      if (_alsoSetPhoneAlarm) {
+        try {
+          await ref
+              .read(alarmHandoffServiceProvider)
+              .openAlarm(scheduledAt: selectedDateTime, label: reminder.title);
+        } catch (error) {
+          followupWarning = followupWarning == null
+              ? 'Clock could not open: $error'
+              : '$followupWarning Clock could not open: $error';
+        }
+      }
+
       if (mounted) {
         setState(() {
           _selectedDateTime = null;
         });
         _showMessage(
-          _repeat == RepeatType.interval
-              ? 'Repeating reminder added.'
-              : 'Reminder added.',
+          followupWarning != null
+              ? 'Reminder saved. $followupWarning'
+              : _repeat == RepeatType.interval
+              ? 'Repeating reminder added${_alsoSetPhoneAlarm ? '; confirm its Clock alarm.' : '.'}'
+              : 'Reminder added${_alsoSetPhoneAlarm ? '; confirm its Clock alarm.' : '.'}',
         );
       }
     } catch (error) {
@@ -311,6 +443,61 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
           .showImmediateTestNotification(),
       successMessage: 'Test notification sent.',
     );
+  }
+
+  Future<void> _exportReminder(Reminder reminder) async {
+    setState(() => _isSaving = true);
+    try {
+      await ref.read(remindersServiceProvider).addReminderToCalendar(reminder);
+      _showMessage(
+        ref.read(calendarEventServiceProvider).supportsManagedEvents
+            ? 'Calendar entry linked.'
+            : 'Review the entry in your calendar app.',
+      );
+    } catch (error) {
+      _showMessage('Could not link calendar: $error');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _showAlertSettings() async {
+    try {
+      final service = ref.read(localNotificationsServiceProvider);
+      final status = await service.getAlertStatus();
+      if (!mounted) return;
+      String enabled(bool? value) => value == null
+          ? 'Not available'
+          : value
+          ? 'On'
+          : 'Off';
+      final openSettings = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Reminder alerts'),
+          content: Text(
+            'Notifications: ${enabled(status.notificationsAllowed)}\n'
+            'Precise timing access: ${enabled(status.exactAlarmsAllowed)}\n'
+            'Sound: ${enabled(status.soundEnabled)}\n'
+            'Vibration: ${enabled(status.vibrationEnabled)}\n\n'
+            'Choose your tone and vibration in phone settings. Volume, Do Not Disturb and battery settings can affect alerts.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Close'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Phone settings'),
+            ),
+          ],
+        ),
+      );
+      if (openSettings == true) await service.openAlertSettings();
+    } catch (error) {
+      _showMessage('Could not read alert settings: $error');
+    }
   }
 
   Future<void> _scheduleTestNotification() async {
@@ -348,13 +535,11 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
   }
 
   Future<void> _editReminder(Reminder reminder) async {
-    if (reminder.repeat == RepeatType.interval) {
-      _showMessage('Delete and recreate interval reminders to change them.');
-      return;
-    }
     final date = await showDatePicker(
       context: context,
-      initialDate: reminder.scheduledAt,
+      initialDate: reminder.scheduledAt.isBefore(DateTime.now())
+          ? DateTime.now()
+          : reminder.scheduledAt,
       firstDate: DateTime.now(),
       lastDate: DateTime(DateTime.now().year + 5),
     );
@@ -385,13 +570,21 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
       return;
     }
 
+    final title = await _editTitle(reminder);
+    if (title == null) {
+      return;
+    }
+
     try {
       await ref
           .read(remindersServiceProvider)
           .updateReminder(
             reminder.copyWith(
               scheduledAt: updatedDateTime,
-              notePreview: _notePreview(widget.note),
+              title: title,
+              notePreview: reminder.taskLineIndex == null
+                  ? _notePreview(widget.note)
+                  : reminder.notePreview,
             ),
           );
       if (mounted) {
@@ -404,17 +597,78 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
 
   Future<void> _toggleReminder(Reminder reminder, bool completed) async {
     try {
-      await ref
+      final calendarCleaned = await ref
           .read(remindersServiceProvider)
           .markReminderCompleted(reminder, completed);
       if (mounted) {
         _showMessage(
-          completed ? 'Reminder completed.' : 'Reminder reactivated.',
+          completed && reminder.repeat != RepeatType.none
+              ? calendarCleaned
+                    ? 'Occurrence done. Next reminder scheduled.'
+                    : 'Occurrence done. Calendar update will retry later.'
+              : completed && !calendarCleaned
+              ? 'Reminder completed. Calendar cleanup will retry later.'
+              : completed
+              ? 'Reminder completed.'
+              : 'Reminder reactivated.',
         );
       }
     } catch (error) {
       _showMessage('Could not update reminder: $error');
     }
+  }
+
+  Future<void> _stopRepeating(Reminder reminder) async {
+    try {
+      final calendarCleaned = await ref
+          .read(remindersServiceProvider)
+          .stopRepeating(reminder);
+      if (mounted) {
+        _showMessage(
+          calendarCleaned
+              ? 'Repeating reminder stopped.'
+              : 'Reminder stopped. Calendar cleanup will retry later.',
+        );
+      }
+    } catch (error) {
+      _showMessage('Could not stop repeating: $error');
+    }
+  }
+
+  Future<String?> _editTitle(Reminder reminder) async {
+    final controller = TextEditingController(
+      text: reminder.title.trim().isEmpty
+          ? reminderTitleFor(noteContent: reminder.notePreview)
+          : reminder.title,
+    );
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reminder title'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Title'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) {
+                Navigator.of(dialogContext).pop(value);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
   }
 
   Future<void> _deleteReminder(Reminder reminder) async {
@@ -497,6 +751,7 @@ class _NoteRemindersSheetState extends ConsumerState<NoteRemindersSheet> {
   }
 
   void _showMessage(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
@@ -508,25 +763,31 @@ class _ReminderTile extends StatelessWidget {
     required this.reminder,
     required this.onToggleComplete,
     required this.onEdit,
+    this.onStopRepeating,
     required this.onDelete,
+    required this.onAddToCalendar,
   });
 
   final Reminder reminder;
   final ValueChanged<bool?> onToggleComplete;
   final VoidCallback onEdit;
+  final VoidCallback? onStopRepeating;
   final VoidCallback onDelete;
+  final VoidCallback? onAddToCalendar;
 
   @override
   Widget build(BuildContext context) {
     final localizations = MaterialLocalizations.of(context);
-    final scheduledDate = localizations.formatShortDate(reminder.scheduledAt);
+    final scheduledDate = localizations.formatShortDate(
+      reminder.nextScheduledAt,
+    );
     final scheduledTime = localizations.formatTimeOfDay(
-      TimeOfDay.fromDateTime(reminder.scheduledAt),
+      TimeOfDay.fromDateTime(reminder.nextScheduledAt),
     );
 
     final state = reminder.isCompleted
         ? ReminderVisualState.completed
-        : reminder.scheduledAt.isBefore(DateTime.now())
+        : reminder.isMissed
         ? ReminderVisualState.missed
         : ReminderVisualState.scheduled;
 
@@ -544,7 +805,9 @@ class _ReminderTile extends StatelessWidget {
                 ),
                 Expanded(
                   child: Text(
-                    reminder.notePreview,
+                    reminder.title.trim().isEmpty
+                        ? reminder.notePreview
+                        : reminder.title,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       decoration: reminder.isCompleted
                           ? TextDecoration.lineThrough
@@ -557,6 +820,12 @@ class _ReminderTile extends StatelessWidget {
                   icon: const Icon(Icons.edit_outlined),
                   tooltip: 'Edit',
                 ),
+                if (onStopRepeating != null)
+                  IconButton(
+                    onPressed: onStopRepeating,
+                    icon: const Icon(Icons.stop_circle_outlined),
+                    tooltip: 'Stop repeating',
+                  ),
                 IconButton(
                   onPressed: onDelete,
                   icon: const Icon(Icons.delete_outline),
@@ -569,6 +838,11 @@ class _ReminderTile extends StatelessWidget {
               label:
                   '${_repeatLabel(reminder)} | $scheduledDate at $scheduledTime',
               state: state,
+            ),
+            TextButton.icon(
+              onPressed: onAddToCalendar,
+              icon: const Icon(Icons.event_outlined),
+              label: const Text('Add to calendar'),
             ),
           ],
         ),

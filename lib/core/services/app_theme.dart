@@ -271,6 +271,7 @@ class AppTheme {
     return base.copyWith(
       brightness: Brightness.dark,
       colorScheme: colorScheme,
+      canvasColor: colorScheme.surface,
       scaffoldBackgroundColor: const Color(0xFF1D1B18),
       textTheme: base.textTheme.apply(
         bodyColor: colorScheme.onSurface,
