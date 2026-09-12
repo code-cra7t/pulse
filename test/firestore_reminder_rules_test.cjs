@@ -42,6 +42,7 @@ async function check(name, changes, expected) {
 (async () => {
   await check('legacy-once', {}, 200);
   await check('legacy-daily', { repeat: { stringValue: 'daily' } }, 200);
+  await check('stable-task-id', { taskId: { stringValue: 'task-123' } }, 200);
   await check('named-hourly', {
     title: { stringValue: 'Water plants' }, repeat: { stringValue: 'interval' },
     repeatIntervalMinutes: { integerValue: '60' },
@@ -60,6 +61,7 @@ async function check(name, changes, expected) {
   }, 403);
   await check('wrong-owner', { userId: { stringValue: 'someone-else' } }, 403);
   await check('invalid-title', { title: { integerValue: '123' } }, 403);
+  await check('invalid-task-id', { taskId: { integerValue: '123' } }, 403);
   await check('unexpected-field', { surprise: { booleanValue: true } }, 403);
-  console.log('All 11 reminder rule checks passed.');
+  console.log('All 13 reminder rule checks passed.');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

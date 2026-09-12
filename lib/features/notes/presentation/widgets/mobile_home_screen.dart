@@ -610,7 +610,10 @@ class MobileNotesMasonryGrid extends StatelessWidget {
   }
 
   double _estimatedCardHeight(Note note) {
-    final tasks = TaskParser.extractTasks(note.content);
+    final tasks = TaskParser.extractTasks(
+      note.content,
+      identities: note.taskIdentities,
+    );
     final titleLength = note.title?.length ?? 0;
     final plainText = TaskParser.extractPlainTextLines(note.content).join(' ');
     final hasImage = note.images.isNotEmpty;
@@ -652,7 +655,10 @@ class MobileNoteCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = note.title?.trim();
     final plainText = TaskParser.extractPlainTextLines(note.content).join(' ');
-    final tasks = TaskParser.extractTasks(note.content);
+    final tasks = TaskParser.extractTasks(
+      note.content,
+      identities: note.taskIdentities,
+    );
     final activeReminders =
         reminders.where((reminder) => !reminder.isCompleted).toList()
           ..sort((a, b) => a.nextScheduledAt.compareTo(b.nextScheduledAt));

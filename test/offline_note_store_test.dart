@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pulse/core/offline/offline_note_store.dart';
 import 'package:pulse/core/offline/pending_note_mutation.dart';
 import 'package:pulse/features/notes/models/note.dart';
+import 'package:pulse/features/tasks/models/note_task_identity.dart';
 import 'package:sembast/sembast_memory.dart';
 
 void main() {
@@ -40,6 +41,25 @@ void main() {
       expect(await store.readNotes(note.userId), [hasContent('Second')]);
       expect(pending, hasLength(1));
       expect(pending.single.id, 'mutation-2');
+    },
+  );
+
+  test(
+    'round-trips stable task identities through the offline note store',
+    () async {
+      final note = _note(content: '- Send report').copyWith(
+        taskIdentities: const [
+          NoteTaskIdentity(id: 'task-a', lineIndex: 0, text: 'Send report'),
+        ],
+      );
+
+      await store.stageUpsert(note, _upsertMutation('mutation-1', note));
+
+      final stored = await store.readNote(note.userId, note.id);
+      expect(stored, isNotNull);
+      expect(stored!.taskIdentities, hasLength(1));
+      expect(stored.taskIdentities.single.id, 'task-a');
+      expect(stored.taskIdentities.single.lineIndex, 0);
     },
   );
 
@@ -84,30 +104,33 @@ void main() {
     },
   );
 
-  test('clears cached notes and mutations for only the selected user', () async {
-    final first = _note(content: 'First user');
-    final second = Note(
-      id: 'note-2',
-      userId: 'user-2',
-      title: 'Other note',
-      isPinned: false,
-      createdAt: DateTime(2026, 1, 1),
-      updatedAt: DateTime(2026, 1, 1),
-      tags: const [],
-      content: 'Second user',
-      color: 0xFFFFF8E1,
-      images: const [],
-    );
+  test(
+    'clears cached notes and mutations for only the selected user',
+    () async {
+      final first = _note(content: 'First user');
+      final second = Note(
+        id: 'note-2',
+        userId: 'user-2',
+        title: 'Other note',
+        isPinned: false,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+        tags: const [],
+        content: 'Second user',
+        color: 0xFFFFF8E1,
+        images: const [],
+      );
 
-    await store.stageUpsert(first, _upsertMutation('mutation-1', first));
-    await store.stageUpsert(second, _upsertMutation('mutation-2', second));
-    await store.clearUser(first.userId);
+      await store.stageUpsert(first, _upsertMutation('mutation-1', first));
+      await store.stageUpsert(second, _upsertMutation('mutation-2', second));
+      await store.clearUser(first.userId);
 
-    expect(await store.readNotes(first.userId), isEmpty);
-    expect(await store.pendingMutations(first.userId), isEmpty);
-    expect(await store.readNotes(second.userId), hasLength(1));
-    expect(await store.pendingMutations(second.userId), hasLength(1));
-  });
+      expect(await store.readNotes(first.userId), isEmpty);
+      expect(await store.pendingMutations(first.userId), isEmpty);
+      expect(await store.readNotes(second.userId), hasLength(1));
+      expect(await store.pendingMutations(second.userId), hasLength(1));
+    },
+  );
 }
 
 Note _note({required String content}) {

@@ -21,7 +21,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'userId', 'title', 'isPinned', 'createdAt', 'updatedAt',
-          'tags', 'content', 'color', 'images', 'imageUrls'
+          'tags', 'content', 'color', 'images', 'imageUrls', 'taskIdentities'
         ])
         && data.userId == request.auth.uid
         && (data.title is string || data.title == null)
@@ -32,7 +32,8 @@ service cloud.firestore {
         && data.content is string
         && data.color is int
         && data.images is list
-        && (!data.keys().hasAny(['imageUrls']) || data.imageUrls is list);
+        && (!data.keys().hasAny(['imageUrls']) || data.imageUrls is list)
+        && (!data.keys().hasAny(['taskIdentities']) || data.taskIdentities is list);
     }
 
     function validReminder(data) {
@@ -43,11 +44,12 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'userId', 'noteId', 'taskLineIndex', 'notePreview', 'scheduledAt',
           'isCompleted', 'repeat', 'notificationId', 'createdAt', 'updatedAt',
-          'title', 'repeatIntervalMinutes'
+          'title', 'repeatIntervalMinutes', 'taskId'
         ])
         && data.userId == request.auth.uid
         && data.noteId is string
         && (data.taskLineIndex is int || data.taskLineIndex == null)
+        && (data.get('taskId', null) == null || data.get('taskId', null) is string)
         && data.notePreview is string
         && (!data.keys().hasAny(['title']) || data.title is string)
         && data.scheduledAt is timestamp

@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/offline/offline_note_store.dart';
 import '../../../core/offline/pending_note_mutation.dart';
+import '../../tasks/data/task_identity_reconciler.dart';
 import '../models/note.dart';
 import '../utils/tag_parser.dart';
 import '../utils/task_parser.dart';
@@ -33,6 +34,10 @@ class NotesService {
     return _offlineStore.watchNotes(userId);
   }
 
+  Future<Note?> readLocalNote(String userId, String noteId) {
+    return _offlineStore.readNote(userId, noteId);
+  }
+
   Future<Note> createNote({
     required String userId,
     String? title,
@@ -56,6 +61,11 @@ class NotesService {
       content: normalizedContent,
       color: color,
       images: images,
+      taskIdentities: TaskIdentityReconciler.reconcile(
+        currentTasks: TaskParser.extractTasks(normalizedContent),
+        previousIdentities: const [],
+        createId: _newTaskId,
+      ),
     );
     final mutation = _upsertMutation(note);
 
@@ -66,9 +76,18 @@ class NotesService {
 
   Future<void> updateNote(Note note) async {
     final normalizedContent = TaskParser.normalizeTaskContent(note.content);
+    final storedNote = await _offlineStore.readNote(note.userId, note.id);
+    final previousIdentities = note.taskIdentities.isNotEmpty
+        ? note.taskIdentities
+        : storedNote?.taskIdentities ?? const [];
     final updatedNote = note.copyWith(
       content: normalizedContent,
       tags: _mergedTags(note.tags, normalizedContent),
+      taskIdentities: TaskIdentityReconciler.reconcile(
+        currentTasks: TaskParser.extractTasks(normalizedContent),
+        previousIdentities: previousIdentities,
+        createId: _newTaskId,
+      ),
       updatedAt: DateTime.now(),
     );
     final mutation = _upsertMutation(updatedNote);
@@ -259,6 +278,8 @@ class NotesService {
       createdAt: DateTime.now(),
     );
   }
+
+  String _newTaskId() => _firestore.collection('tasks').doc().id;
 
   String _mutationId(String noteId) {
     return '${DateTime.now().microsecondsSinceEpoch}-$noteId';

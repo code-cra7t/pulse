@@ -39,6 +39,17 @@ class OfflineNoteStore {
     return controller.stream;
   }
 
+  Future<Note?> readNote(String userId, String noteId) async {
+    final database = await _database;
+    final value = await _notesStore
+        .record(_noteKey(userId, noteId))
+        .get(database);
+    if (value == null) {
+      return null;
+    }
+    return Note.fromLocalMap(value);
+  }
+
   Future<List<Note>> readNotes(String userId) async {
     final database = await _database;
     final snapshots = await _notesStore.find(
