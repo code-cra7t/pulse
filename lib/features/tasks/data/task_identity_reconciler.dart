@@ -84,11 +84,15 @@ class TaskIdentityReconciler {
 
     return [
       for (var index = 0; index < currentTasks.length; index++)
-        NoteTaskIdentity(
-          id: matches[index]?.id ?? createId(),
-          lineIndex: currentTasks[index].lineIndex,
-          text: currentTasks[index].text,
-        ),
+        matches[index]?.copyWith(
+              lineIndex: currentTasks[index].lineIndex,
+              text: currentTasks[index].text,
+            ) ??
+            NoteTaskIdentity(
+              id: createId(),
+              lineIndex: currentTasks[index].lineIndex,
+              text: currentTasks[index].text,
+            ),
     ];
   }
 }

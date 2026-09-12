@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pulse/core/models/priority_level.dart';
 import 'package:pulse/core/offline/offline_note_store.dart';
 import 'package:pulse/core/offline/pending_note_mutation.dart';
 import 'package:pulse/features/notes/models/note.dart';
@@ -47,9 +48,19 @@ void main() {
   test(
     'round-trips stable task identities through the offline note store',
     () async {
+      final dueAt = DateTime(2026, 10, 2, 9);
       final note = _note(content: '- Send report').copyWith(
-        taskIdentities: const [
-          NoteTaskIdentity(id: 'task-a', lineIndex: 0, text: 'Send report'),
+        taskIdentities: [
+          NoteTaskIdentity(
+            id: 'task-a',
+            lineIndex: 0,
+            text: 'Send report',
+            projectId: 'project-a',
+            dueAt: dueAt,
+            priority: PriorityLevel.high,
+            estimatedMinutes: 45,
+            isFlexible: false,
+          ),
         ],
       );
 
@@ -60,6 +71,11 @@ void main() {
       expect(stored!.taskIdentities, hasLength(1));
       expect(stored.taskIdentities.single.id, 'task-a');
       expect(stored.taskIdentities.single.lineIndex, 0);
+      expect(stored.taskIdentities.single.projectId, 'project-a');
+      expect(stored.taskIdentities.single.dueAt, dueAt);
+      expect(stored.taskIdentities.single.priority, PriorityLevel.high);
+      expect(stored.taskIdentities.single.estimatedMinutes, 45);
+      expect(stored.taskIdentities.single.isFlexible, isFalse);
     },
   );
 

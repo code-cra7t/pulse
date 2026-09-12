@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pulse/core/models/priority_level.dart';
 import 'package:pulse/features/notes/utils/task_parser.dart';
 import 'package:pulse/features/tasks/data/task_identity_reconciler.dart';
 import 'package:pulse/features/tasks/models/note_task_identity.dart';
@@ -106,5 +107,36 @@ void main() {
     expect(task.id, 'task-a');
     expect(task.text, 'Send report');
     expect(task.lineIndex, 0);
+  });
+
+  test('reconciliation preserves planning metadata on stable identities', () {
+    final dueAt = DateTime(2026, 10, 2, 9);
+    final previous = <NoteTaskIdentity>[
+      NoteTaskIdentity(
+        id: 'task-a',
+        lineIndex: 0,
+        text: 'Study insurance',
+        projectId: 'project-exam',
+        dueAt: dueAt,
+        priority: PriorityLevel.critical,
+        estimatedMinutes: 90,
+        isFlexible: false,
+      ),
+    ];
+    final ids = <String>['unused'].iterator;
+
+    final reconciled = TaskIdentityReconciler.reconcile(
+      currentTasks: TaskParser.extractTasks('Intro\n- Study insurance'),
+      previousIdentities: previous,
+      createId: () => idFactory(ids),
+    ).single;
+
+    expect(reconciled.id, 'task-a');
+    expect(reconciled.lineIndex, 1);
+    expect(reconciled.projectId, 'project-exam');
+    expect(reconciled.dueAt, dueAt);
+    expect(reconciled.priority, PriorityLevel.critical);
+    expect(reconciled.estimatedMinutes, 90);
+    expect(reconciled.isFlexible, isFalse);
   });
 }
