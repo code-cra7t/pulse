@@ -4,6 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/offline/offline_note_store.dart';
+import '../../../core/offline/offline_project_store.dart';
 import '../../../core/services/calendar_event_service.dart';
 import '../../../core/services/local_notifications_service.dart';
 
@@ -13,7 +14,8 @@ class AccountDeletionService {
     this._firestore,
     this._storage,
     this._notifications,
-    this._offlineNotes, {
+    this._offlineNotes,
+    this._offlineProjects, {
     CalendarEventService? calendar,
   }) : _calendar = calendar ?? CalendarEventService();
 
@@ -24,6 +26,7 @@ class AccountDeletionService {
   final FirebaseStorage _storage;
   final LocalNotificationsService _notifications;
   final OfflineNoteStore _offlineNotes;
+  final OfflineProjectStore _offlineProjects;
   final CalendarEventService _calendar;
 
   Future<void> deleteCurrentAccount({required String password}) async {
@@ -55,6 +58,9 @@ class AccountDeletionService {
     await _deleteQuery(
       _firestore.collection('notes').where('userId', isEqualTo: user.uid),
     );
+    await _deleteQuery(
+      _firestore.collection('projects').where('userId', isEqualTo: user.uid),
+    );
     await _firestore
         .collection('users')
         .doc(user.uid)
@@ -64,6 +70,7 @@ class AccountDeletionService {
     await _firestore.collection('users').doc(user.uid).delete();
 
     await _offlineNotes.clearUser(user.uid);
+    await _offlineProjects.clearUser(user.uid);
     await _notifications.cancelAllReminders();
     await user.delete();
   }

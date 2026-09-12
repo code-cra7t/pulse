@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/firebase_providers.dart';
 import '../../notes/providers/notes_providers.dart';
+import '../../projects/providers/project_providers.dart';
 import '../../reminders/providers/reminders_providers.dart';
 import '../data/account_deletion_service.dart';
 
@@ -12,5 +13,6 @@ final accountDeletionServiceProvider = Provider<AccountDeletionService>((ref) {
     ref.watch(firebaseStorageProvider),
     ref.watch(localNotificationsServiceProvider),
     ref.watch(offlineNoteStoreProvider),
+    ref.watch(offlineProjectStoreProvider),
   );
 });

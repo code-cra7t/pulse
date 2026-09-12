@@ -36,6 +36,28 @@ service cloud.firestore {
         && (!data.keys().hasAny(['taskIdentities']) || data.taskIdentities is list);
     }
 
+    function validProject(data) {
+      return data.keys().hasAll([
+          'userId', 'name', 'description', 'status', 'priority', 'deadline',
+          'targetMinutesPerWeek', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'name', 'description', 'status', 'priority', 'deadline',
+          'targetMinutesPerWeek', 'createdAt', 'updatedAt'
+        ])
+        && data.userId == request.auth.uid
+        && data.name is string
+        && data.name.size() > 0
+        && data.description is string
+        && data.status in ['active', 'paused', 'completed', 'archived']
+        && data.priority in ['none', 'low', 'medium', 'high', 'critical']
+        && (data.deadline is timestamp || data.deadline == null)
+        && (data.targetMinutesPerWeek is int || data.targetMinutesPerWeek == null)
+        && (data.targetMinutesPerWeek == null || data.targetMinutesPerWeek >= 0)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     function validReminder(data) {
       return data.keys().hasAll([
           'userId', 'noteId', 'taskLineIndex', 'notePreview', 'scheduledAt',
@@ -100,6 +122,14 @@ service cloud.firestore {
       allow create: if signedIn() && validNote(request.resource.data);
       allow update: if owns(resource.data)
         && validNote(request.resource.data)
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /projects/{projectId} {
+      allow read, delete: if owns(resource.data);
+      allow create: if signedIn() && validProject(request.resource.data);
+      allow update: if owns(resource.data)
+        && validProject(request.resource.data)
         && request.resource.data.userId == resource.data.userId;
     }
 

@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../../../core/models/priority_level.dart';
 
 enum ProjectStatus {
@@ -71,6 +73,27 @@ class Project {
     );
   }
 
+  factory Project.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? <String, dynamic>{};
+    final createdAt = _dateFromTimestamp(data['createdAt']);
+    final updatedAt = _dateFromTimestamp(data['updatedAt']);
+
+    return Project(
+      id: doc.id,
+      userId: data['userId'] as String? ?? '',
+      name: data['name'] as String? ?? '',
+      description: data['description'] as String? ?? '',
+      status: ProjectStatus.fromValue(data['status'] as String?),
+      priority: PriorityLevel.fromValue(data['priority'] as String?),
+      deadline: _dateFromTimestamp(data['deadline']),
+      targetMinutesPerWeek: data['targetMinutesPerWeek'] as int?,
+      createdAt:
+          createdAt ?? updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+      updatedAt:
+          updatedAt ?? createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+
   factory Project.fromLocalMap(Map<String, dynamic> data) {
     return Project(
       id: data['id'] as String? ?? '',
@@ -88,6 +111,20 @@ class Project {
           _dateFromMilliseconds(data['updatedAtMs']) ??
           DateTime.fromMillisecondsSinceEpoch(0),
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'userId': userId,
+      'name': name,
+      'description': description,
+      'status': status.name,
+      'priority': priority.name,
+      'deadline': deadline == null ? null : Timestamp.fromDate(deadline!),
+      'targetMinutesPerWeek': targetMinutesPerWeek,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
+    };
   }
 
   Map<String, dynamic> toLocalMap() {
@@ -108,6 +145,10 @@ class Project {
 
 DateTime? _dateFromMilliseconds(Object? value) {
   return value is int ? DateTime.fromMillisecondsSinceEpoch(value) : null;
+}
+
+DateTime? _dateFromTimestamp(Object? value) {
+  return value is Timestamp ? value.toDate() : null;
 }
 
 const _unchanged = Object();
