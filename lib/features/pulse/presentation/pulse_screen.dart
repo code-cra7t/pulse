@@ -8,6 +8,8 @@ import '../../../core/widgets/pulse_components.dart';
 import '../../planning/presentation/widgets/task_planning_sheet.dart';
 import '../../planning/providers/planning_providers.dart';
 import '../../projects/models/project.dart';
+import '../../scheduling/models/scheduling_day_state.dart';
+import '../../scheduling/providers/scheduling_providers.dart';
 import '../../projects/providers/project_providers.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/providers/task_providers.dart';
@@ -38,6 +40,12 @@ class PulseScreen extends ConsumerWidget {
       tasks: tasks,
       now: currentTime,
     );
+    final planningDate = DateTime(
+      currentTime.year,
+      currentTime.month,
+      currentTime.day,
+    );
+    final scheduleAsync = ref.watch(schedulingDayProvider(planningDate));
     final usesBottomNavigation =
         MediaQuery.sizeOf(context).width < AdaptiveShell.tabletBreakpoint;
 
@@ -65,6 +73,7 @@ class PulseScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   _DaySnapshot(overview: overview),
+                  _PulseCapacity(state: scheduleAsync, onOpenPlan: onOpenPlan),
                   if (projectsAsync.hasError) ...[
                     const SizedBox(height: AppSpacing.sm),
                     const _SyncNotice(),
@@ -233,6 +242,94 @@ class _PulseHeader extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _PulseCapacity extends StatelessWidget {
+  const _PulseCapacity({required this.state, required this.onOpenPlan});
+
+  final AsyncValue<SchedulingDayState> state;
+  final VoidCallback? onOpenPlan;
+
+  @override
+  Widget build(BuildContext context) {
+    final data = state.asData?.value;
+    if (data == null || !data.isConfigured || !data.isEnabledDay) {
+      return const SizedBox.shrink();
+    }
+
+    if (data.needsCalendarAccess) {
+      return Padding(
+        padding: const EdgeInsets.only(top: AppSpacing.sm),
+        child: AppCard(
+          color: AppColors.sky,
+          padding: const EdgeInsets.all(AppSpacing.sm),
+          child: Row(
+            children: [
+              const Icon(Icons.calendar_month_outlined, size: 19),
+              const SizedBox(width: AppSpacing.xs),
+              const Expanded(
+                child: Text(
+                  'Connect your calendar in Plan before JotCue suggests times around fixed commitments.',
+                ),
+              ),
+              if (onOpenPlan != null)
+                TextButton(onPressed: onOpenPlan, child: const Text('Plan')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final availability = data.availability;
+    if (availability == null) {
+      return const SizedBox.shrink();
+    }
+    final proposal = data.proposal;
+    final accepted =
+        proposal?.acceptedMinutes ??
+        data.acceptedBlocks.fold<int>(
+          0,
+          (sum, block) => sum + block.duration.inMinutes,
+        );
+    final proposed = proposal?.proposedMinutes ?? 0;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.sm),
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.calendar_view_day_outlined, size: 20),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${_formatMinutes(availability.freeMinutes)} realistically free today',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${_formatMinutes(proposed)} suggested · ${_formatMinutes(accepted)} accepted'
+                    '${proposal != null && proposal.unscheduledTaskCount > 0 ? ' · ${proposal.unscheduledTaskCount} ${proposal.unscheduledTaskCount == 1 ? 'task' : 'tasks'} still do not fit' : ''}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            if (onOpenPlan != null)
+              IconButton(
+                onPressed: onOpenPlan,
+                tooltip: 'Open Plan',
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

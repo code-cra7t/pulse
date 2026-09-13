@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/offline/offline_note_store.dart';
 import '../../../core/offline/offline_project_store.dart';
+import '../../../core/offline/offline_schedule_block_store.dart';
 import '../../../core/services/calendar_event_service.dart';
 import '../../../core/services/local_notifications_service.dart';
 
@@ -15,7 +16,8 @@ class AccountDeletionService {
     this._storage,
     this._notifications,
     this._offlineNotes,
-    this._offlineProjects, {
+    this._offlineProjects,
+    this._offlineScheduleBlocks, {
     CalendarEventService? calendar,
   }) : _calendar = calendar ?? CalendarEventService();
 
@@ -27,6 +29,7 @@ class AccountDeletionService {
   final LocalNotificationsService _notifications;
   final OfflineNoteStore _offlineNotes;
   final OfflineProjectStore _offlineProjects;
+  final OfflineScheduleBlockStore _offlineScheduleBlocks;
   final CalendarEventService _calendar;
 
   Future<void> deleteCurrentAccount({required String password}) async {
@@ -71,6 +74,7 @@ class AccountDeletionService {
 
     await _offlineNotes.clearUser(user.uid);
     await _offlineProjects.clearUser(user.uid);
+    await _offlineScheduleBlocks.clearUser(user.uid);
     await _notifications.cancelAllReminders();
     await user.delete();
   }

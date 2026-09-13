@@ -5,6 +5,10 @@ import 'package:pulse/core/models/priority_level.dart';
 import 'package:pulse/core/services/app_theme.dart';
 import 'package:pulse/features/projects/models/project.dart';
 import 'package:pulse/features/projects/providers/project_providers.dart';
+import 'package:pulse/features/scheduling/models/schedule_block.dart';
+import 'package:pulse/features/scheduling/providers/scheduling_providers.dart';
+import 'package:pulse/features/settings/models/user_settings.dart';
+import 'package:pulse/features/settings/providers/user_settings_providers.dart';
 import 'package:pulse/features/pulse/presentation/pulse_screen.dart';
 import 'package:pulse/features/tasks/models/task.dart';
 import 'package:pulse/features/tasks/providers/task_providers.dart';
@@ -56,6 +60,12 @@ void main() {
         overrides: [
           projectsStreamProvider.overrideWith((ref) => Stream.value([project])),
           tasksProvider.overrideWith((ref) => tasks),
+          currentUserSettingsProvider.overrideWith(
+            (ref) => Stream.value(UserSettings.defaults()),
+          ),
+          scheduleBlocksStreamProvider.overrideWith(
+            (ref) => Stream.value(const <ScheduleBlock>[]),
+          ),
         ],
         child: MaterialApp(
           theme: AppTheme.build(),
@@ -104,6 +114,12 @@ void main() {
             (ref) => Stream.value(const <Project>[]),
           ),
           tasksProvider.overrideWith((ref) => const <Task>[]),
+          currentUserSettingsProvider.overrideWith(
+            (ref) => Stream.value(UserSettings.defaults()),
+          ),
+          scheduleBlocksStreamProvider.overrideWith(
+            (ref) => Stream.value(const <ScheduleBlock>[]),
+          ),
         ],
         child: MaterialApp(
           theme: AppTheme.build(),
@@ -153,6 +169,12 @@ void main() {
         overrides: [
           projectsStreamProvider.overrideWith((ref) => Stream.value([project])),
           tasksProvider.overrideWith((ref) => [task]),
+          currentUserSettingsProvider.overrideWith(
+            (ref) => Stream.value(UserSettings.defaults()),
+          ),
+          scheduleBlocksStreamProvider.overrideWith(
+            (ref) => Stream.value(const <ScheduleBlock>[]),
+          ),
         ],
         child: MaterialApp(
           theme: AppTheme.build(),

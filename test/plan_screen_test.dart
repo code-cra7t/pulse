@@ -5,6 +5,10 @@ import 'package:pulse/core/models/priority_level.dart';
 import 'package:pulse/core/services/app_theme.dart';
 import 'package:pulse/features/planning/presentation/plan_screen.dart';
 import 'package:pulse/features/projects/models/project.dart';
+import 'package:pulse/features/scheduling/models/schedule_block.dart';
+import 'package:pulse/features/scheduling/providers/scheduling_providers.dart';
+import 'package:pulse/features/settings/models/user_settings.dart';
+import 'package:pulse/features/settings/providers/user_settings_providers.dart';
 import 'package:pulse/features/projects/providers/project_providers.dart';
 import 'package:pulse/features/tasks/models/task.dart';
 import 'package:pulse/features/tasks/providers/task_providers.dart';
@@ -54,6 +58,12 @@ void main() {
         overrides: [
           projectsStreamProvider.overrideWith((ref) => Stream.value([project])),
           tasksProvider.overrideWith((ref) => tasks),
+          currentUserSettingsProvider.overrideWith(
+            (ref) => Stream.value(UserSettings.defaults()),
+          ),
+          scheduleBlocksStreamProvider.overrideWith(
+            (ref) => Stream.value(const <ScheduleBlock>[]),
+          ),
         ],
         child: MaterialApp(
           theme: AppTheme.build(),
@@ -62,29 +72,33 @@ void main() {
       ),
     );
 
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('Plan'), findsOneWidget);
-    expect(find.text('Life insurance exam'), findsNWidgets(2));
-    expect(find.text('Revise chapter 4'), findsOneWidget);
-    expect(find.text('Follow up application'), findsOneWidget);
+    expect(find.text('Suggested schedule'), findsOneWidget);
+    expect(find.text('Set planning availability'), findsOneWidget);
+    expect(find.text('Life insurance exam'), findsOneWidget);
     expect(find.text('1'), findsNWidgets(2));
 
-    await tester.ensureVisible(find.text('Revise chapter 4'));
+    await tester.tap(find.text('Life insurance exam'));
     await tester.pumpAndSettle();
+    expect(find.text('Edit project'), findsOneWidget);
+    expect(find.text('Delete project'), findsOneWidget);
+    Navigator.of(tester.element(find.text('Edit project'))).pop();
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const ValueKey('plan-screen-scroll')),
+      const Offset(0, -1000),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Revise chapter 4'), findsOneWidget);
+    expect(find.text('Follow up application'), findsOneWidget);
+
     await tester.tap(find.text('Revise chapter 4'));
     await tester.pumpAndSettle();
     expect(find.text('Plan task'), findsOneWidget);
     expect(find.text('Save planning details'), findsOneWidget);
-    Navigator.of(tester.element(find.text('Plan task'))).pop();
-    await tester.pumpAndSettle();
-
-    await tester.ensureVisible(find.text('Life insurance exam').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Life insurance exam').first);
-    await tester.pumpAndSettle();
-    expect(find.text('Edit project'), findsOneWidget);
-    expect(find.text('Delete project'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -102,6 +116,12 @@ void main() {
             (ref) => Stream.value(const <Project>[]),
           ),
           tasksProvider.overrideWith((ref) => const <Task>[]),
+          currentUserSettingsProvider.overrideWith(
+            (ref) => Stream.value(UserSettings.defaults()),
+          ),
+          scheduleBlocksStreamProvider.overrideWith(
+            (ref) => Stream.value(const <ScheduleBlock>[]),
+          ),
         ],
         child: MaterialApp(
           theme: AppTheme.build(),
@@ -110,7 +130,7 @@ void main() {
       ),
     );
 
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('No projects yet'), findsOneWidget);
     await tester.drag(
@@ -119,6 +139,40 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('No open tasks'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('scheduling setup stays usable on a narrow phone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          projectsStreamProvider.overrideWith(
+            (ref) => Stream.value(const <Project>[]),
+          ),
+          tasksProvider.overrideWith((ref) => const <Task>[]),
+          currentUserSettingsProvider.overrideWith(
+            (ref) => Stream.value(UserSettings.defaults()),
+          ),
+          scheduleBlocksStreamProvider.overrideWith(
+            (ref) => Stream.value(const <ScheduleBlock>[]),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.build(),
+          home: Scaffold(body: PlanScreen(now: DateTime(2026, 9, 14, 9))),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Suggested schedule'), findsOneWidget);
+    expect(find.text('Set planning availability'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

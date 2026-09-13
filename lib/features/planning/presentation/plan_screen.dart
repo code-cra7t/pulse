@@ -6,7 +6,15 @@ import '../../../core/services/app_theme.dart';
 import '../../../core/services/firebase_providers.dart';
 import '../../../core/widgets/adaptive_shell.dart';
 import '../../../core/widgets/pulse_components.dart';
+import '../../calendar/providers/calendar_providers.dart';
 import '../../projects/models/project.dart';
+import '../../scheduling/models/schedule_block.dart';
+import '../../scheduling/models/schedule_proposal.dart';
+import '../../scheduling/presentation/widgets/scheduling_preferences_sheet.dart';
+import '../../scheduling/presentation/widgets/suggested_schedule_section.dart';
+import '../../scheduling/providers/scheduling_providers.dart';
+import '../../settings/models/user_settings.dart';
+import '../../settings/providers/user_settings_providers.dart';
 import '../../projects/providers/project_providers.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/providers/task_providers.dart';
@@ -32,6 +40,12 @@ class PlanScreen extends ConsumerWidget {
       tasks: tasks,
       now: currentTime,
     );
+    final planningDate = DateTime(
+      currentTime.year,
+      currentTime.month,
+      currentTime.day,
+    );
+    final scheduleAsync = ref.watch(schedulingDayProvider(planningDate));
 
     final usesBottomNavigation =
         MediaQuery.sizeOf(context).width < AdaptiveShell.tabletBreakpoint;
@@ -65,6 +79,17 @@ class PlanScreen extends ConsumerWidget {
                           'Projects are showing from local data. Cloud sync will retry automatically.',
                     ),
                   ],
+                  const SizedBox(height: AppSpacing.xl),
+                  SuggestedScheduleSection(
+                    state: scheduleAsync,
+                    onConfigure: () => _configureAvailability(context, ref),
+                    onRequestCalendar: () =>
+                        _requestCalendarAccess(context, ref, planningDate),
+                    onAccept: (proposal) =>
+                        _acceptProposal(context, ref, planningDate, proposal),
+                    onRemoveBlock: (block) =>
+                        _removeScheduleBlock(context, ref, planningDate, block),
+                  ),
                   const SizedBox(height: AppSpacing.xl),
                   SectionHeader(
                     title: 'Projects',
@@ -166,6 +191,114 @@ class PlanScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _configureAvailability(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final user = ref.read(firebaseAuthProvider).currentUser;
+    if (user == null) {
+      return;
+    }
+    final settings =
+        ref.read(currentUserSettingsProvider).asData?.value ??
+        UserSettings.defaults();
+    final updated = await showSchedulingPreferencesSheet(
+      context: context,
+      initial: settings.schedulingPreferences,
+    );
+    if (updated == null || !context.mounted) {
+      return;
+    }
+    try {
+      await ref
+          .read(userSettingsRepositoryProvider)
+          .updateSchedulingPreferences(user.uid, updated);
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save availability: $error')),
+      );
+    }
+  }
+
+  Future<void> _requestCalendarAccess(
+    BuildContext context,
+    WidgetRef ref,
+    DateTime date,
+  ) async {
+    try {
+      final granted = await ref
+          .read(deviceCalendarReadServiceProvider)
+          .requestAccess();
+      ref.invalidate(calendarReadAccessProvider);
+      ref.invalidate(schedulingDayProvider(date));
+      if (!granted && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Calendar access was not granted. JotCue will not propose times that could conflict with your device calendar.',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not request calendar access: $error')),
+      );
+    }
+  }
+
+  Future<void> _acceptProposal(
+    BuildContext context,
+    WidgetRef ref,
+    DateTime date,
+    ScheduleProposal proposal,
+  ) async {
+    final user = ref.read(firebaseAuthProvider).currentUser;
+    if (user == null) {
+      return;
+    }
+    try {
+      await ref
+          .read(scheduleBlocksRepositoryProvider)
+          .acceptProposal(userId: user.uid, proposal: proposal);
+      ref.invalidate(schedulingDayProvider(date));
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not accept this time: $error')),
+      );
+    }
+  }
+
+  Future<void> _removeScheduleBlock(
+    BuildContext context,
+    WidgetRef ref,
+    DateTime date,
+    ScheduleBlock block,
+  ) async {
+    try {
+      await ref
+          .read(scheduleBlocksRepositoryProvider)
+          .deleteBlock(block.userId, block.id);
+      ref.invalidate(schedulingDayProvider(date));
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not remove planned block: $error')),
+      );
+    }
   }
 
   Future<void> _editTask(

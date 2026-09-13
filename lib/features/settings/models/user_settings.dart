@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../scheduling/models/scheduling_preferences.dart';
+
 enum PulseThemeMode {
   system,
   light,
@@ -19,6 +21,7 @@ class UserSettings {
     required this.defaultNoteTag,
     required this.notificationsEnabled,
     required this.smartRemindersEnabled,
+    required this.schedulingPreferences,
     required this.updatedAt,
   });
 
@@ -26,6 +29,7 @@ class UserSettings {
   final String defaultNoteTag;
   final bool notificationsEnabled;
   final bool smartRemindersEnabled;
+  final SchedulingPreferences schedulingPreferences;
   final DateTime updatedAt;
 
   factory UserSettings.defaults() {
@@ -34,6 +38,7 @@ class UserSettings {
       defaultNoteTag: 'Personal',
       notificationsEnabled: true,
       smartRemindersEnabled: true,
+      schedulingPreferences: SchedulingPreferences.defaults(),
       updatedAt: DateTime.now(),
     );
   }
@@ -52,6 +57,7 @@ class UserSettings {
       defaultNoteTag: data['defaultNoteTag'] as String? ?? 'Personal',
       notificationsEnabled: data['notificationsEnabled'] as bool? ?? true,
       smartRemindersEnabled: data['smartRemindersEnabled'] as bool? ?? true,
+      schedulingPreferences: SchedulingPreferences.fromMap(data['scheduling']),
       updatedAt: updatedAt?.toDate() ?? DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
@@ -62,6 +68,7 @@ class UserSettings {
       'defaultNoteTag': defaultNoteTag,
       'notificationsEnabled': notificationsEnabled,
       'smartRemindersEnabled': smartRemindersEnabled,
+      'scheduling': schedulingPreferences.toMap(),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }

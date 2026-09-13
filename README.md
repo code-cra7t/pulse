@@ -12,6 +12,9 @@ planning signals.
 - Offline-first projects and task planning metadata
 - Plan workspace for projects, deadlines, priorities, effort, and flexibility
 - Pulse workspace for deterministic daily focus and attention cues
+- Read-only Android calendar availability and deterministic scheduling proposals
+- User-defined planning windows, breaks, daily focus limits, and protected lunch
+- User-approved JotCue schedule blocks stored locally on the device
 - Smart reminder phrase parsing
 - Local notifications and calendar export
 - Profile and application settings
@@ -25,6 +28,7 @@ Flutter + Riverpod
        |
        +-- Sembast local database (all platforms)
        |      +-- cached notes and projects
+       |      +-- device-local accepted schedule blocks
        |      +-- pending note/project mutation queues
        |
        +-- Firebase Auth
@@ -37,6 +41,9 @@ Notes and Projects read from the local database. Remote Firestore snapshots
 update local state when available. Offline creates, edits, and deletes are
 queued and replayed when connectivity returns. Note-backed task text remains
 in the note while planning metadata is stored against stable task identities.
+Scheduling preferences sync through the existing user settings document, while
+external calendar events stay local/in-memory and accepted JotCue schedule
+blocks currently remain device-local.
 
 ## Local setup
 

@@ -4,6 +4,7 @@ import '../../../core/services/firebase_providers.dart';
 import '../../notes/providers/notes_providers.dart';
 import '../../projects/providers/project_providers.dart';
 import '../../reminders/providers/reminders_providers.dart';
+import '../../scheduling/providers/scheduling_providers.dart';
 import '../data/account_deletion_service.dart';
 
 final accountDeletionServiceProvider = Provider<AccountDeletionService>((ref) {
@@ -14,5 +15,6 @@ final accountDeletionServiceProvider = Provider<AccountDeletionService>((ref) {
     ref.watch(localNotificationsServiceProvider),
     ref.watch(offlineNoteStoreProvider),
     ref.watch(offlineProjectStoreProvider),
+    ref.watch(offlineScheduleBlockStoreProvider),
   );
 });

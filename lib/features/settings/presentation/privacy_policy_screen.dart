@@ -17,12 +17,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: const [
-              Text('Effective September 8, 2026'),
+              Text('Effective September 13, 2026'),
               SizedBox(height: AppSpacing.lg),
               _PolicySection(
                 title: 'Information JotCue handles',
                 body:
-                    'JotCue stores the email address used for your account, your display name and optional profile photo, plus the notes, tasks, reminders, settings, and images you choose to create. A local copy of notes and pending changes is kept on your device so the app can work offline.',
+                    'JotCue stores the email address used for your account, your display name and optional profile photo, plus the notes, tasks, reminders, settings, and images you choose to create. A local copy of notes and pending changes is kept on your device so the app can work offline. Accepted JotCue planning blocks are currently stored only on the device.',
               ),
               _PolicySection(
                 title: 'How information is used',
@@ -37,7 +37,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
               _PolicySection(
                 title: 'Notifications and calendar',
                 body:
-                    'Reminder notifications are scheduled on your device after you grant permission. Calendar linking is optional. On Android, JotCue requests calendar access to list writable calendars and create, verify, update or remove entries linked to your reminders. Those links stay on this device; JotCue does not upload your calendar contents. Your chosen calendar account may synchronize exported entries through its own provider. On other supported platforms, calendar exports use the device calendar flow and are managed separately. Phone alarms are confirmed and managed in the Clock app.',
+                    'Reminder notifications are scheduled on your device after you grant permission. Calendar access is optional. On Android, JotCue can read busy calendar times locally to calculate availability and can separately list writable calendars to create, verify, update or remove entries linked to reminders. Read calendar events and accepted JotCue planning blocks are not uploaded to JotCue cloud storage. Your chosen calendar account may synchronize exported reminder entries through its own provider. On other supported platforms, calendar exports use the device calendar flow and are managed separately. Phone alarms are confirmed and managed in the Clock app.',
               ),
               _PolicySection(
                 title: 'Deletion and retention',
