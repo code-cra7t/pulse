@@ -29,7 +29,7 @@ void main() {
 
     expect(find.byType(FloatingBottomNav), findsOneWidget);
     expect(find.text('Main content'), findsOneWidget);
-    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Pulse'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
   });
 
@@ -37,7 +37,7 @@ void main() {
     await pumpShell(tester, 320);
 
     expect(find.byType(FloatingBottomNav), findsOneWidget);
-    expect(find.text('Today'), findsNothing);
+    expect(find.text('Pulse'), findsNothing);
     expect(find.text('Plan'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -47,7 +47,7 @@ void main() {
 
     expect(find.byType(FloatingBottomNav), findsNothing);
     expect(find.text('Main content'), findsOneWidget);
-    expect(find.byTooltip('Today'), findsOneWidget);
+    expect(find.byTooltip('Pulse'), findsOneWidget);
     expect(find.text('Desktop editor'), findsNothing);
   });
 
@@ -56,7 +56,7 @@ void main() {
 
     expect(find.byType(FloatingBottomNav), findsNothing);
     expect(find.text('Notes'), findsOneWidget);
-    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Pulse'), findsOneWidget);
     expect(find.text('Desktop notes list'), findsOneWidget);
     expect(find.text('Desktop editor'), findsOneWidget);
   });

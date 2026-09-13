@@ -1,13 +1,17 @@
 # JotCue
 
-JotCue is a cross-platform Flutter note-taking application that turns
-notes and task phrases into reminders.
+JotCue is a cross-platform Flutter productivity application that keeps the
+existing note-taking experience while turning note tasks into structured
+planning signals.
 
 ## Current capabilities
 
 - Email/password authentication
 - Notes with images, tags, colors, pinning, and search
-- Tasks embedded inside notes
+- Tasks embedded inside notes with stable hidden identities
+- Offline-first projects and task planning metadata
+- Plan workspace for projects, deadlines, priorities, effort, and flexibility
+- Pulse workspace for deterministic daily focus and attention cues
 - Smart reminder phrase parsing
 - Local notifications and calendar export
 - Profile and application settings
@@ -20,8 +24,8 @@ notes and task phrases into reminders.
 Flutter + Riverpod
        |
        +-- Sembast local database (all platforms)
-       |      +-- cached notes
-       |      +-- pending mutation queue
+       |      +-- cached notes and projects
+       |      +-- pending note/project mutation queues
        |
        +-- Firebase Auth
        +-- Cloud Firestore
@@ -29,9 +33,10 @@ Flutter + Riverpod
        +-- Local Notifications
 ```
 
-The UI reads notes from the local database. Remote Firestore snapshots update
-the local database when available. Offline creates, edits, and deletes are
-queued and replayed when connectivity returns.
+Notes and Projects read from the local database. Remote Firestore snapshots
+update local state when available. Offline creates, edits, and deletes are
+queued and replayed when connectivity returns. Note-backed task text remains
+in the note while planning metadata is stored against stable task identities.
 
 ## Local setup
 

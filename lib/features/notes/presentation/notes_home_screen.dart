@@ -15,6 +15,7 @@ import '../../../core/services/firebase_providers.dart';
 import '../../profile/presentation/profile_screen.dart';
 import '../../profile/providers/user_profile_providers.dart';
 import '../../planning/presentation/plan_screen.dart';
+import '../../pulse/presentation/pulse_screen.dart';
 import '../../reminders/data/smart_reminder_parser.dart';
 import '../../reminders/data/assistant_plan_parser.dart';
 import '../../reminders/models/parsed_reminder.dart';
@@ -89,22 +90,14 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
         .where((reminder) => !reminder.isCompleted)
         .map((reminder) => reminder.noteId)
         .toSet();
-    final mobileBaseNotes = switch (_navIndex) {
-      1 => filteredNotes.where((note) => _isToday(note.updatedAt)).toList(),
-      _ => filteredNotes,
-    };
     final notes = _filterMobileNotes(
-      mobileBaseNotes,
+      filteredNotes,
       _homeFilter,
       reminderNoteIds,
     );
     final pinnedNotes = notes.where((note) => note.isPinned).toList();
     final remindersByNoteId = _remindersByNoteId(allReminders);
-    final navigationNotes = switch (_navIndex) {
-      1 => filteredNotes.where((note) => _isToday(note.updatedAt)).toList(),
-      _ => filteredNotes,
-    };
-    final desktopNotes = navigationNotes.where((note) {
+    final desktopNotes = filteredNotes.where((note) {
       return switch (_desktopFilter) {
         _DesktopNoteFilter.all => true,
         _DesktopNoteFilter.work => _hasTag(note, 'Work'),
@@ -149,6 +142,11 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
             ? SettingsScreen(onOpenProfile: _openProfile)
             : _navIndex == 2
             ? const PlanScreen()
+            : _navIndex == 1
+            ? PulseScreen(
+                displayName: profileName,
+                onOpenPlan: () => _selectDestination(2),
+              )
             : MobileHomeScreen(
                 notes: notes,
                 pinnedNotes: pinnedNotes,
@@ -196,6 +194,12 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
       ),
       desktopWorkspace: _navIndex == 2
           ? const PlanScreen(embedded: true)
+          : _navIndex == 1
+          ? PulseScreen(
+              embedded: true,
+              displayName: profileName,
+              onOpenPlan: () => _selectDestination(2),
+            )
           : null,
       desktopList: notesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -320,13 +324,6 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
     Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const ProfileScreen()));
-  }
-
-  bool _isToday(DateTime value) {
-    final now = DateTime.now();
-    return value.year == now.year &&
-        value.month == now.month &&
-        value.day == now.day;
   }
 
   bool _hasTag(Note note, String value) {

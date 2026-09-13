@@ -257,8 +257,8 @@ class FloatingBottomNav extends StatelessWidget {
                             ),
                             Expanded(
                               child: _NavItem(
-                                icon: Icons.light_mode_outlined,
-                                label: 'Today',
+                                icon: Icons.bolt_outlined,
+                                label: 'Pulse',
                                 showLabel: showLabels,
                                 selected: selectedIndex == 1,
                                 onTap: () => onDestinationSelected(1),

@@ -193,7 +193,7 @@ class _DesktopSidebar extends StatelessWidget {
 
   static const _destinations = <(IconData, String)>[
     (Icons.note_alt_rounded, 'Notes'),
-    (Icons.light_mode_outlined, 'Today'),
+    (Icons.bolt_outlined, 'Pulse'),
     (Icons.view_week_outlined, 'Plan'),
     (Icons.settings_outlined, 'Settings'),
   ];
