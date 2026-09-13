@@ -8,6 +8,7 @@ import '../../../core/offline/offline_project_store.dart';
 import '../../../core/offline/offline_schedule_block_store.dart';
 import '../../../core/services/calendar_event_service.dart';
 import '../../../core/services/local_notifications_service.dart';
+import '../../calendar/data/device_schedule_calendar_service.dart';
 
 class AccountDeletionService {
   AccountDeletionService(
@@ -19,7 +20,9 @@ class AccountDeletionService {
     this._offlineProjects,
     this._offlineScheduleBlocks, {
     CalendarEventService? calendar,
-  }) : _calendar = calendar ?? CalendarEventService();
+    DeviceScheduleCalendarService? scheduleCalendar,
+  }) : _calendar = calendar ?? CalendarEventService(),
+       _scheduleCalendar = scheduleCalendar ?? DeviceScheduleCalendarService();
 
   static const int _batchSize = 400;
 
@@ -31,6 +34,7 @@ class AccountDeletionService {
   final OfflineProjectStore _offlineProjects;
   final OfflineScheduleBlockStore _offlineScheduleBlocks;
   final CalendarEventService _calendar;
+  final DeviceScheduleCalendarService _scheduleCalendar;
 
   Future<void> deleteCurrentAccount({required String password}) async {
     final user = _auth.currentUser;
@@ -74,6 +78,11 @@ class AccountDeletionService {
 
     await _offlineNotes.clearUser(user.uid);
     await _offlineProjects.clearUser(user.uid);
+    try {
+      await _scheduleCalendar.detachAllLinks();
+    } catch (error) {
+      debugPrint('[ScheduleCalendar] local link cleanup failed: $error');
+    }
     await _offlineScheduleBlocks.clearUser(user.uid);
     await _notifications.cancelAllReminders();
     await user.delete();

@@ -7,6 +7,10 @@ import '../../models/schedule_block.dart';
 import '../../models/schedule_proposal.dart';
 import '../../models/scheduling_day_state.dart';
 
+typedef ScheduleBlockCalendarCheck = Future<bool> Function(ScheduleBlock block);
+typedef ScheduleBlockCalendarAction =
+    Future<bool> Function(ScheduleBlock block);
+
 class SuggestedScheduleSection extends StatelessWidget {
   const SuggestedScheduleSection({
     super.key,
@@ -15,6 +19,10 @@ class SuggestedScheduleSection extends StatelessWidget {
     required this.onRequestCalendar,
     required this.onAccept,
     required this.onRemoveBlock,
+    required this.calendarWriteSupported,
+    required this.onCalendarLinked,
+    required this.onAddOrUpdateCalendar,
+    required this.onRemoveCalendar,
   });
 
   final AsyncValue<SchedulingDayState> state;
@@ -22,6 +30,10 @@ class SuggestedScheduleSection extends StatelessWidget {
   final VoidCallback onRequestCalendar;
   final ValueChanged<ScheduleProposal> onAccept;
   final ValueChanged<ScheduleBlock> onRemoveBlock;
+  final bool calendarWriteSupported;
+  final ScheduleBlockCalendarCheck onCalendarLinked;
+  final ScheduleBlockCalendarAction onAddOrUpdateCalendar;
+  final ScheduleBlockCalendarAction onRemoveCalendar;
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +80,10 @@ class SuggestedScheduleSection extends StatelessWidget {
             onRequestCalendar: onRequestCalendar,
             onAccept: onAccept,
             onRemoveBlock: onRemoveBlock,
+            calendarWriteSupported: calendarWriteSupported,
+            onCalendarLinked: onCalendarLinked,
+            onAddOrUpdateCalendar: onAddOrUpdateCalendar,
+            onRemoveCalendar: onRemoveCalendar,
           ),
         ),
       ],
@@ -82,6 +98,10 @@ class _ScheduleStateCard extends StatelessWidget {
     required this.onRequestCalendar,
     required this.onAccept,
     required this.onRemoveBlock,
+    required this.calendarWriteSupported,
+    required this.onCalendarLinked,
+    required this.onAddOrUpdateCalendar,
+    required this.onRemoveCalendar,
   });
 
   final SchedulingDayState value;
@@ -89,6 +109,10 @@ class _ScheduleStateCard extends StatelessWidget {
   final VoidCallback onRequestCalendar;
   final ValueChanged<ScheduleProposal> onAccept;
   final ValueChanged<ScheduleBlock> onRemoveBlock;
+  final bool calendarWriteSupported;
+  final ScheduleBlockCalendarCheck onCalendarLinked;
+  final ScheduleBlockCalendarAction onAddOrUpdateCalendar;
+  final ScheduleBlockCalendarAction onRemoveCalendar;
 
   @override
   Widget build(BuildContext context) {
@@ -231,6 +255,10 @@ class _ScheduleStateCard extends StatelessWidget {
               child: _AcceptedScheduleBlock(
                 block: block,
                 onRemove: () => onRemoveBlock(block),
+                calendarWriteSupported: calendarWriteSupported,
+                onCalendarLinked: onCalendarLinked,
+                onAddOrUpdateCalendar: onAddOrUpdateCalendar,
+                onRemoveCalendar: onRemoveCalendar,
               ),
             ),
           ),
@@ -297,11 +325,65 @@ class _ScheduleMetric extends StatelessWidget {
   }
 }
 
-class _AcceptedScheduleBlock extends StatelessWidget {
-  const _AcceptedScheduleBlock({required this.block, required this.onRemove});
+enum _CalendarBlockAction { upsert, remove }
+
+class _AcceptedScheduleBlock extends StatefulWidget {
+  const _AcceptedScheduleBlock({
+    required this.block,
+    required this.onRemove,
+    required this.calendarWriteSupported,
+    required this.onCalendarLinked,
+    required this.onAddOrUpdateCalendar,
+    required this.onRemoveCalendar,
+  });
 
   final ScheduleBlock block;
   final VoidCallback onRemove;
+  final bool calendarWriteSupported;
+  final ScheduleBlockCalendarCheck onCalendarLinked;
+  final ScheduleBlockCalendarAction onAddOrUpdateCalendar;
+  final ScheduleBlockCalendarAction onRemoveCalendar;
+
+  @override
+  State<_AcceptedScheduleBlock> createState() => _AcceptedScheduleBlockState();
+}
+
+class _AcceptedScheduleBlockState extends State<_AcceptedScheduleBlock> {
+  late Future<bool> _linked;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshLink();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AcceptedScheduleBlock oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.block.id != widget.block.id ||
+        oldWidget.calendarWriteSupported != widget.calendarWriteSupported) {
+      _refreshLink();
+    }
+  }
+
+  void _refreshLink() {
+    _linked = widget.calendarWriteSupported
+        ? widget.onCalendarLinked(widget.block)
+        : Future<bool>.value(false);
+  }
+
+  Future<void> _runCalendarAction(_CalendarBlockAction action) async {
+    final changed = switch (action) {
+      _CalendarBlockAction.upsert => await widget.onAddOrUpdateCalendar(
+        widget.block,
+      ),
+      _CalendarBlockAction.remove => await widget.onRemoveCalendar(
+        widget.block,
+      ),
+    };
+    if (!mounted || !changed) return;
+    setState(_refreshLink);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -319,7 +401,7 @@ class _AcceptedScheduleBlock extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  block.title,
+                  widget.block.title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(
@@ -327,15 +409,55 @@ class _AcceptedScheduleBlock extends StatelessWidget {
                   ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  '${_formatClock(context, block.startsAt)}–${_formatClock(context, block.endsAt)} · Accepted on this device',
-                  style: Theme.of(context).textTheme.bodySmall,
+                FutureBuilder<bool>(
+                  future: _linked,
+                  builder: (context, snapshot) {
+                    final suffix = snapshot.data == true
+                        ? ' · Calendar linked'
+                        : '';
+                    return Text(
+                      '${_formatClock(context, widget.block.startsAt)}–${_formatClock(context, widget.block.endsAt)} · Accepted on this device$suffix',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    );
+                  },
                 ),
               ],
             ),
           ),
+          if (widget.calendarWriteSupported)
+            FutureBuilder<bool>(
+              future: _linked,
+              builder: (context, snapshot) {
+                final linked = snapshot.data == true;
+                return PopupMenuButton<_CalendarBlockAction>(
+                  tooltip: 'Calendar options',
+                  icon: Icon(
+                    linked
+                        ? Icons.event_available_outlined
+                        : Icons.event_outlined,
+                    size: 20,
+                  ),
+                  onSelected: _runCalendarAction,
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: _CalendarBlockAction.upsert,
+                      child: Text(
+                        linked ? 'Update calendar entry' : 'Add to calendar',
+                      ),
+                    ),
+                    if (linked)
+                      const PopupMenuItem(
+                        value: _CalendarBlockAction.remove,
+                        child: Text('Remove from calendar'),
+                      ),
+                  ],
+                );
+              },
+            ),
           IconButton(
-            onPressed: onRemove,
+            onPressed: widget.onRemove,
             tooltip: 'Remove planned block',
             icon: const Icon(Icons.close_rounded, size: 19),
           ),

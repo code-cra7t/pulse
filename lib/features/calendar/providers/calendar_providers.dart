@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/availability_engine.dart';
 import '../data/device_calendar_read_service.dart';
+import '../data/device_schedule_calendar_service.dart';
 import '../models/calendar_busy_event.dart';
 import '../models/calendar_query_range.dart';
 
@@ -10,6 +11,11 @@ final deviceCalendarReadServiceProvider = Provider<DeviceCalendarReadService>((
 ) {
   return DeviceCalendarReadService();
 });
+
+final deviceScheduleCalendarServiceProvider =
+    Provider<DeviceScheduleCalendarService>((ref) {
+      return DeviceScheduleCalendarService();
+    });
 
 final availabilityEngineProvider = Provider<AvailabilityEngine>((ref) {
   return const AvailabilityEngine();

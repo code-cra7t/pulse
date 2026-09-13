@@ -10,11 +10,13 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var calendarBridge: CalendarBridge? = null
     private var calendarReadBridge: CalendarReadBridge? = null
+    private var scheduleCalendarBridge: ScheduleCalendarBridge? = null
     private var intervalBridge: IntervalNotificationBridge? = null
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         calendarBridge = CalendarBridge(this, flutterEngine.dartExecutor.binaryMessenger)
         calendarReadBridge = CalendarReadBridge(this, flutterEngine.dartExecutor.binaryMessenger)
+        scheduleCalendarBridge = ScheduleCalendarBridge(this, flutterEngine.dartExecutor.binaryMessenger)
         intervalBridge = IntervalNotificationBridge(this, flutterEngine.dartExecutor.binaryMessenger)
 
         MethodChannel(
@@ -56,11 +58,13 @@ class MainActivity : FlutterActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         calendarBridge?.onRequestPermissionsResult(requestCode, grantResults)
         calendarReadBridge?.onRequestPermissionsResult(requestCode, grantResults)
+        scheduleCalendarBridge?.onRequestPermissionsResult(requestCode, grantResults)
     }
 
     override fun onDestroy() {
         calendarBridge?.dispose()
         calendarReadBridge?.dispose()
+        scheduleCalendarBridge?.dispose()
         intervalBridge?.dispose()
         super.onDestroy()
     }

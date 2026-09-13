@@ -40,7 +40,9 @@ Calendar / availability rules:
 - Keep calendar reading separate from existing reminder calendar export/linking behavior.
 - Availability calculation must stay deterministic and accept explicit planning windows; do not assume a user's waking or working hours.
 - Device calendar reads must stay bounded to near-term ranges (currently at most 31 days).
-- Scheduling proposals are suggestions only. Never write accepted work blocks to the external calendar unless a later patch explicitly introduces calendar-write approval.
+- Scheduling proposals are suggestions only. External calendar writes require explicit user confirmation and calendar-write permission; never write or update schedule entries silently.
+- Schedule-block calendar links must remain separate from reminder calendar links and may only own events created for that exact JotCue block.
+- Rescheduling a linked block must not silently update the external calendar; offer an explicit update choice.
 - Accepted JotCue schedule blocks are device-local until cross-device scheduling conflict semantics are designed.
 - Adaptive replanning is advisory: never silently mark a block completed/missed, move a block, or displace work. Every mutation requires an explicit user action.
 - Non-flexible tasks may be flagged when their accepted block conflicts, but JotCue must not offer an automatic move suggestion for them.

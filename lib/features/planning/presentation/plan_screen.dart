@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/models/priority_level.dart';
 import '../../../core/services/app_theme.dart';
@@ -25,6 +26,8 @@ import '../models/plan_overview.dart';
 import '../providers/planning_providers.dart';
 import 'widgets/project_edit_sheet.dart';
 import 'widgets/task_planning_sheet.dart';
+
+enum _LinkedBlockRemovalChoice { keepCalendar, removeBoth }
 
 class PlanScreen extends ConsumerWidget {
   const PlanScreen({super.key, this.embedded = false, this.now});
@@ -151,6 +154,16 @@ class PlanScreen extends ConsumerWidget {
                       block,
                       replanningNow: replanningNow,
                     ),
+                    calendarWriteSupported: ref
+                        .watch(deviceScheduleCalendarServiceProvider)
+                        .isSupported,
+                    onCalendarLinked: (block) => ref
+                        .read(deviceScheduleCalendarServiceProvider)
+                        .isLinked(block.id),
+                    onAddOrUpdateCalendar: (block) =>
+                        _addOrUpdateScheduleCalendar(context, ref, block),
+                    onRemoveCalendar: (block) =>
+                        _removeScheduleCalendar(context, ref, block),
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   SectionHeader(
@@ -354,6 +367,50 @@ class PlanScreen extends ConsumerWidget {
     DateTime? replanningNow,
   }) async {
     try {
+      final calendar = ref.read(deviceScheduleCalendarServiceProvider);
+      if (calendar.isSupported && await calendar.isLinked(block.id)) {
+        if (!context.mounted) return;
+        final choice = await showDialog<_LinkedBlockRemovalChoice>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Remove planned block?'),
+            content: const Text(
+              'This block also has a JotCue-linked device calendar entry. You can keep that calendar event as a normal standalone event, or remove both copies.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(
+                  context,
+                ).pop(_LinkedBlockRemovalChoice.keepCalendar),
+                child: const Text('Keep calendar event'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(
+                  context,
+                ).pop(_LinkedBlockRemovalChoice.removeBoth),
+                child: const Text('Remove both'),
+              ),
+            ],
+          ),
+        );
+        if (choice == null) return;
+        if (choice == _LinkedBlockRemovalChoice.removeBoth) {
+          if (!context.mounted) return;
+          final granted = await _ensureScheduleCalendarWriteAccess(
+            context,
+            ref,
+          );
+          if (!granted) return;
+          await calendar.removeLinkedBlock(block.id);
+        } else {
+          await calendar.detachBlock(block.id);
+        }
+      }
+
       await ref
           .read(scheduleBlocksRepositoryProvider)
           .deleteBlock(block.userId, block.id);
@@ -362,13 +419,146 @@ class PlanScreen extends ConsumerWidget {
         adaptiveReplanningProvider(replanningNow ?? DateTime.now()),
       );
     } catch (error) {
-      if (!context.mounted) {
-        return;
-      }
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not remove planned block: $error')),
       );
     }
+  }
+
+  Future<bool> _addOrUpdateScheduleCalendar(
+    BuildContext context,
+    WidgetRef ref,
+    ScheduleBlock block,
+  ) async {
+    final calendar = ref.read(deviceScheduleCalendarServiceProvider);
+    if (!calendar.isSupported) return false;
+    try {
+      final linked = await calendar.isLinked(block.id);
+      if (!context.mounted) return false;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(linked ? 'Update calendar entry?' : 'Add to calendar?'),
+          content: Text(
+            linked
+                ? 'Update the JotCue-linked calendar event to match this planned block? Only that linked event will be changed.'
+                : 'Add this JotCue planning block to a device calendar you choose? JotCue will write one event only after calendar permission is granted.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(linked ? 'Update' : 'Continue'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return false;
+      if (!context.mounted) return false;
+      final granted = await _ensureScheduleCalendarWriteAccess(context, ref);
+      if (!granted) return false;
+      await calendar.upsertBlock(block);
+      if (!context.mounted) return true;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            linked
+                ? 'Calendar entry updated.'
+                : 'Planned block added to your calendar.',
+          ),
+        ),
+      );
+      return true;
+    } on PlatformException catch (error) {
+      if (error.code == 'CALENDAR_CANCELLED') return false;
+      if (!context.mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not update calendar: ${error.message ?? error.code}',
+          ),
+        ),
+      );
+      return false;
+    } catch (error) {
+      if (!context.mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update calendar: $error')),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> _removeScheduleCalendar(
+    BuildContext context,
+    WidgetRef ref,
+    ScheduleBlock block,
+  ) async {
+    final calendar = ref.read(deviceScheduleCalendarServiceProvider);
+    if (!calendar.isSupported) return false;
+    try {
+      final linked = await calendar.isLinked(block.id);
+      if (!linked) return true;
+      if (!context.mounted) return false;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Remove calendar entry?'),
+          content: const Text(
+            'This removes only the device calendar event JotCue created for this planning block. The JotCue block itself stays in Plan.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Remove'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return false;
+      if (!context.mounted) return false;
+      final granted = await _ensureScheduleCalendarWriteAccess(context, ref);
+      if (!granted) return false;
+      await calendar.removeLinkedBlock(block.id);
+      if (!context.mounted) return true;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Calendar entry removed.')));
+      return true;
+    } catch (error) {
+      if (!context.mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not remove calendar entry: $error')),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> _ensureScheduleCalendarWriteAccess(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final calendar = ref.read(deviceScheduleCalendarServiceProvider);
+    if (await calendar.hasWriteAccess()) return true;
+    final granted = await calendar.requestWriteAccess();
+    if (!granted && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Calendar write access was not granted. JotCue did not change your calendar.',
+          ),
+        ),
+      );
+    }
+    return granted;
   }
 
   Future<void> _setScheduleBlockStatus(
@@ -410,7 +600,7 @@ class PlanScreen extends ConsumerWidget {
       return;
     }
     try {
-      await ref
+      final movedBlock = await ref
           .read(scheduleBlocksRepositoryProvider)
           .rescheduleBlock(
             block: block,
@@ -432,6 +622,37 @@ class PlanScreen extends ConsumerWidget {
           ),
         ),
       );
+      final calendar = ref.read(deviceScheduleCalendarServiceProvider);
+      if (calendar.isSupported && await calendar.isLinked(block.id)) {
+        if (!context.mounted) return;
+        final updateCalendar = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Update calendar copy?'),
+            content: const Text(
+              'This planned block has a linked device calendar event. Update that event to the new time too?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Not now'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Update calendar'),
+              ),
+            ],
+          ),
+        );
+        if (updateCalendar == true) {
+          if (!context.mounted) return;
+          final granted = await _ensureScheduleCalendarWriteAccess(
+            context,
+            ref,
+          );
+          if (granted) await calendar.upsertBlock(movedBlock);
+        }
+      }
     } catch (error) {
       if (!context.mounted) {
         return;
