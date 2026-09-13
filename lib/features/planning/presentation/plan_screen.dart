@@ -11,6 +11,9 @@ import '../../projects/providers/project_providers.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/providers/task_providers.dart';
 import '../models/plan_overview.dart';
+import '../providers/planning_providers.dart';
+import 'widgets/project_edit_sheet.dart';
+import 'widgets/task_planning_sheet.dart';
 
 class PlanScreen extends ConsumerWidget {
   const PlanScreen({super.key, this.embedded = false, this.now});
@@ -108,6 +111,7 @@ class PlanScreen extends ConsumerWidget {
                         child: _ProjectCard(
                           project: project,
                           overview: overview,
+                          onTap: () => _editProject(context, ref, project),
                         ),
                       ),
                     ),
@@ -138,6 +142,12 @@ class PlanScreen extends ConsumerWidget {
                               task: task,
                               projects: overview.projects,
                               now: currentTime,
+                              onTap: () => _editTask(
+                                context,
+                                ref,
+                                task,
+                                overview.projects,
+                              ),
                             ),
                           ),
                         ),
@@ -156,6 +166,124 @@ class PlanScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _editTask(
+    BuildContext context,
+    WidgetRef ref,
+    Task task,
+    List<Project> projects,
+  ) async {
+    final update = await showTaskPlanningSheet(
+      context: context,
+      task: task,
+      projects: projects,
+    );
+    if (update == null || !context.mounted) {
+      return;
+    }
+
+    try {
+      await ref
+          .read(planningServiceProvider)
+          .updateTaskMetadata(
+            userId: task.userId,
+            noteId: task.sourceNoteId,
+            taskId: task.id,
+            update: update,
+          );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not update task: $error')));
+    }
+  }
+
+  Future<void> _editProject(
+    BuildContext context,
+    WidgetRef ref,
+    Project project,
+  ) async {
+    final result = await showProjectEditSheet(
+      context: context,
+      project: project,
+    );
+    if (result == null || !context.mounted) {
+      return;
+    }
+
+    if (result.action == ProjectEditAction.delete) {
+      await _confirmDeleteProject(context, ref, project);
+      return;
+    }
+
+    try {
+      await ref.read(planningServiceProvider).updateProject(result.project);
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update project: $error')),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteProject(
+    BuildContext context,
+    WidgetRef ref,
+    Project project,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete project?'),
+        content: Text(
+          '“${project.name}” will be deleted. Its tasks will stay in their notes and become unassigned.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete project'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+
+    try {
+      final clearedCount = await ref
+          .read(planningServiceProvider)
+          .deleteProjectAndUnassignTasks(
+            userId: project.userId,
+            projectId: project.id,
+          );
+      if (!context.mounted) {
+        return;
+      }
+      final suffix = clearedCount == 0
+          ? ''
+          : ' ${clearedCount == 1 ? '1 task is' : '$clearedCount tasks are'} now unassigned.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Project deleted.$suffix')));
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete project: $error')),
+      );
+    }
   }
 
   Future<void> _createProject(BuildContext context, WidgetRef ref) async {
@@ -324,10 +452,15 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _ProjectCard extends StatelessWidget {
-  const _ProjectCard({required this.project, required this.overview});
+  const _ProjectCard({
+    required this.project,
+    required this.overview,
+    required this.onTap,
+  });
 
   final Project project;
   final PlanOverview overview;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -337,6 +470,7 @@ class _ProjectCard extends StatelessWidget {
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return AppCard(
+      onTap: onTap,
       borderColor: project.isActive ? AppColors.panelBorderFor(context) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -353,6 +487,8 @@ class _ProjectCard extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.xs),
               _StatusPill(status: project.status),
+              const SizedBox(width: 2),
+              const Icon(Icons.chevron_right_rounded, size: 20),
             ],
           ),
           if (project.description.trim().isNotEmpty) ...[
@@ -422,17 +558,20 @@ class _TaskRow extends StatelessWidget {
     required this.task,
     required this.projects,
     required this.now,
+    required this.onTap,
   });
 
   final Task task;
   final List<Project> projects;
   final DateTime now;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final project = _projectFor(task.projectId);
     final overdue = task.dueAt?.isBefore(now) ?? false;
     return AppCard(
+      onTap: onTap,
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
         vertical: AppSpacing.sm,
@@ -490,6 +629,8 @@ class _TaskRow extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 2),
+          const Icon(Icons.chevron_right_rounded, size: 20),
         ],
       ),
     );

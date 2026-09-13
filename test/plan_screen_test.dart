@@ -69,6 +69,22 @@ void main() {
     expect(find.text('Revise chapter 4'), findsOneWidget);
     expect(find.text('Follow up application'), findsOneWidget);
     expect(find.text('1'), findsNWidgets(2));
+
+    await tester.ensureVisible(find.text('Revise chapter 4'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Revise chapter 4'));
+    await tester.pumpAndSettle();
+    expect(find.text('Plan task'), findsOneWidget);
+    expect(find.text('Save planning details'), findsOneWidget);
+    Navigator.of(tester.element(find.text('Plan task'))).pop();
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Life insurance exam').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Life insurance exam').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Edit project'), findsOneWidget);
+    expect(find.text('Delete project'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

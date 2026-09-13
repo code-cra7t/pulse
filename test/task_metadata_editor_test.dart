@@ -90,4 +90,33 @@ void main() {
       throwsArgumentError,
     );
   });
+
+  test('clears only task references that point to the deleted project', () {
+    final note = buildNote().copyWith(
+      content: '- Draft application\n- Keep assignment',
+      taskIdentities: [
+        const NoteTaskIdentity(
+          id: 'task-1',
+          lineIndex: 0,
+          text: 'Draft application',
+          projectId: 'project-delete',
+        ),
+        const NoteTaskIdentity(
+          id: 'task-2',
+          lineIndex: 1,
+          text: 'Keep assignment',
+          projectId: 'project-keep',
+        ),
+      ],
+    );
+
+    final updated = TaskMetadataEditor.clearProjectAssignments(
+      note: note,
+      projectId: 'project-delete',
+    );
+
+    expect(updated.content, note.content);
+    expect(updated.taskIdentities.first.projectId, isNull);
+    expect(updated.taskIdentities.last.projectId, 'project-keep');
+  });
 }

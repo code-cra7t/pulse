@@ -38,6 +38,10 @@ class NotesService {
     return _offlineStore.readNote(userId, noteId);
   }
 
+  Future<List<Note>> readLocalNotes(String userId) {
+    return _offlineStore.readNotes(userId);
+  }
+
   Future<Note> createNote({
     required String userId,
     String? title,

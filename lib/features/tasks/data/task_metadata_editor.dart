@@ -25,6 +25,23 @@ class TaskMetadataEditor {
     return note.copyWith(taskIdentities: identities);
   }
 
+  static Note clearProjectAssignments({
+    required Note note,
+    required String projectId,
+  }) {
+    var changed = false;
+    final identities = note.taskIdentities
+        .map((identity) {
+          if (identity.projectId != projectId) {
+            return identity;
+          }
+          changed = true;
+          return identity.copyWith(projectId: null);
+        })
+        .toList(growable: false);
+    return changed ? note.copyWith(taskIdentities: identities) : note;
+  }
+
   static NoteTaskIdentity _applyUpdate(
     NoteTaskIdentity identity,
     TaskMetadataUpdate update,
