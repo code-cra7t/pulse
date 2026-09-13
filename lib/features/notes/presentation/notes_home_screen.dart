@@ -14,6 +14,7 @@ import '../../../core/widgets/pulse_components.dart';
 import '../../../core/services/firebase_providers.dart';
 import '../../profile/presentation/profile_screen.dart';
 import '../../profile/providers/user_profile_providers.dart';
+import '../../planning/presentation/plan_screen.dart';
 import '../../reminders/data/smart_reminder_parser.dart';
 import '../../reminders/data/assistant_plan_parser.dart';
 import '../../reminders/models/parsed_reminder.dart';
@@ -90,10 +91,6 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
         .toSet();
     final mobileBaseNotes = switch (_navIndex) {
       1 => filteredNotes.where((note) => _isToday(note.updatedAt)).toList(),
-      2 =>
-        filteredNotes
-            .where((note) => reminderNoteIds.contains(note.id))
-            .toList(),
       _ => filteredNotes,
     };
     final notes = _filterMobileNotes(
@@ -105,10 +102,6 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
     final remindersByNoteId = _remindersByNoteId(allReminders);
     final navigationNotes = switch (_navIndex) {
       1 => filteredNotes.where((note) => _isToday(note.updatedAt)).toList(),
-      2 =>
-        filteredNotes
-            .where((note) => reminderNoteIds.contains(note.id))
-            .toList(),
       _ => filteredNotes,
     };
     final desktopNotes = navigationNotes.where((note) {
@@ -154,6 +147,8 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
         ),
         data: (_) => _navIndex == 3
             ? SettingsScreen(onOpenProfile: _openProfile)
+            : _navIndex == 2
+            ? const PlanScreen()
             : MobileHomeScreen(
                 notes: notes,
                 pinnedNotes: pinnedNotes,
@@ -184,11 +179,6 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
                 onFilterSelected: (selectedFilter) {
                   setState(() {
                     _homeFilter = selectedFilter;
-                    if (selectedFilter == MobileNoteFilter.reminders) {
-                      _navIndex = 2;
-                    } else if (_navIndex == 2) {
-                      _navIndex = 0;
-                    }
                   });
                 },
                 onSearchChanged: (value) {
@@ -204,6 +194,9 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
                 onProfileTap: _openProfile,
               ),
       ),
+      desktopWorkspace: _navIndex == 2
+          ? const PlanScreen(embedded: true)
+          : null,
       desktopList: notesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => _DesktopErrorState(error: error),
@@ -239,9 +232,7 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
   void _selectDestination(int index) {
     setState(() {
       _navIndex = index;
-      _homeFilter = index == 2
-          ? MobileNoteFilter.reminders
-          : MobileNoteFilter.all;
+      _homeFilter = MobileNoteFilter.all;
       if (index == 3) {
         _creatingDesktopNote = false;
         _showingDesktopProfile = false;

@@ -267,8 +267,8 @@ class FloatingBottomNav extends StatelessWidget {
                             const SizedBox(width: 72),
                             Expanded(
                               child: _NavItem(
-                                icon: Icons.notifications_none_rounded,
-                                label: 'Reminders',
+                                icon: Icons.view_week_outlined,
+                                label: 'Plan',
                                 showLabel: showLabels,
                                 selected: selectedIndex == 2,
                                 onTap: () => onDestinationSelected(2),
