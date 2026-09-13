@@ -44,7 +44,7 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
-  test('reports Android calendar read access', () async {
+  test('reports native calendar read access on Android', () async {
     expect(await service.hasAccess(), isTrue);
     expect(calls.single.method, 'hasAccess');
   });
@@ -69,10 +69,25 @@ void main() {
     });
   });
 
+  test('iOS uses the same calendar read bridge contract', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+
+    expect(await service.hasAccess(), isTrue);
+    expect(await service.requestAccess(), isTrue);
+    final events = await service.readBusyEvents(start: start, end: end);
+
+    expect(events.single.title, 'Lecture');
+    expect(calls.map((call) => call.method), [
+      'hasAccess',
+      'requestAccess',
+      'listEvents',
+    ]);
+  });
+
   test(
-    'unsupported platforms do not touch the native calendar channel',
+    'unsupported desktop platforms do not touch the native calendar channel',
     () async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
 
       expect(await service.hasAccess(), isFalse);
       expect(await service.requestAccess(), isFalse);

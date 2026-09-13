@@ -8,7 +8,9 @@ class DeviceCalendarReadService {
   static const _channel = MethodChannel('com.tori.pulse/calendar_read');
 
   bool get isSupported =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   Future<bool> hasAccess() async {
     if (!isSupported) {

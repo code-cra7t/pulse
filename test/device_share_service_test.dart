@@ -90,8 +90,36 @@ void main() {
     await service.dispose();
   });
 
-  test('unsupported platforms never touch the Android share channel', () async {
+  test('iOS drains the same review-first share queue contract', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    pending.addAll([
+      <Object?, Object?>{
+        'text': 'https://example.com/research',
+        'mimeType': 'text/uri-list',
+        'subject': 'Research',
+      },
+      null,
+    ]);
+    final service = DeviceShareService();
+    final received = <String>[];
+    final subscription = service.sharedContent.listen(
+      (payload) => received.add(payload.text),
+    );
+
+    await service.initialize();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(received, ['https://example.com/research']);
+    expect(
+      calls.where((call) => call.method == 'consumePendingShare'),
+      hasLength(2),
+    );
+    await subscription.cancel();
+    await service.dispose();
+  });
+
+  test('unsupported desktop platforms never touch the share channel', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     final service = DeviceShareService();
 
     await service.initialize();

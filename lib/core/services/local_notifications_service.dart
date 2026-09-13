@@ -19,6 +19,7 @@ class LocalNotificationsService {
 
   static const String _snoozeActionId = 'snooze';
   static const String _dismissActionId = 'dismiss';
+  static const String _reminderDarwinCategoryId = 'jotcue_reminder_actions_v1';
   static const Duration _snoozeDuration = Duration(minutes: 10);
   static const _native = MethodChannel('com.tori.pulse/notifications');
   bool get _isAndroid =>
@@ -108,9 +109,32 @@ class LocalNotificationsService {
     tz.initializeTimeZones();
     await _configureLocalTimezone();
 
-    const settings = InitializationSettings(
+    final settings = InitializationSettings(
       android: AndroidInitializationSettings('ic_notification'),
-      iOS: DarwinInitializationSettings(),
+      iOS: DarwinInitializationSettings(
+        notificationCategories: <DarwinNotificationCategory>[
+          DarwinNotificationCategory(
+            _reminderDarwinCategoryId,
+            actions: <DarwinNotificationAction>[
+              DarwinNotificationAction.plain(
+                _snoozeActionId,
+                'Snooze',
+                options: <DarwinNotificationActionOption>{
+                  DarwinNotificationActionOption.foreground,
+                },
+              ),
+              DarwinNotificationAction.plain(
+                _dismissActionId,
+                'Dismiss',
+                options: <DarwinNotificationActionOption>{
+                  DarwinNotificationActionOption.foreground,
+                  DarwinNotificationActionOption.destructive,
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
       windows: WindowsInitializationSettings(
         appName: 'JotCue',
         appUserModelId: 'Tori.PulseNotes',
@@ -322,6 +346,7 @@ class LocalNotificationsService {
           presentAlert: true,
           presentBadge: true,
           presentSound: true,
+          categoryIdentifier: _reminderDarwinCategoryId,
         ),
         windows: const WindowsNotificationDetails(),
       );

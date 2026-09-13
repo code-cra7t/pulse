@@ -8,7 +8,9 @@ class CalendarEventService {
   static const _channel = MethodChannel('com.tori.pulse/calendar');
 
   bool get supportsManagedEvents =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   Future<void> addReminderToCalendar({
     required String reminderId,
@@ -18,6 +20,13 @@ class CalendarEventService {
     required RepeatType repeat,
     int? repeatIntervalMinutes,
   }) async {
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.iOS &&
+        repeat == RepeatType.interval) {
+      throw UnsupportedError(
+        'Custom repeat calendar entries are not supported by iOS Calendar.',
+      );
+    }
     if (supportsManagedEvents) {
       await _channel.invokeMethod<void>(
         'upsert',
@@ -34,7 +43,7 @@ class CalendarEventService {
     }
     if (repeat == RepeatType.interval) {
       throw UnsupportedError(
-        'Custom repeat calendar entries are Android-only.',
+        'Custom repeat calendar entries are unavailable on this platform.',
       );
     }
     final event = Event(

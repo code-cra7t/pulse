@@ -21,7 +21,9 @@ class DeviceShareService {
   Stream<SharedCapturePayload> get sharedContent => _controller.stream;
 
   bool get _isSupported =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   Future<void> initialize() async {
     if (_initialized || !_isSupported) {

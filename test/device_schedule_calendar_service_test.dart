@@ -81,15 +81,34 @@ void main() {
     expect(calls[1].arguments, {'blockId': 'block-1'});
   });
 
-  test('unsupported platforms never touch the native write channel', () async {
+  test('iOS uses the managed schedule-calendar bridge', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
 
-    expect(await service.hasWriteAccess(), isFalse);
-    expect(await service.requestWriteAccess(), isFalse);
-    expect(await service.isLinked(block.id), isFalse);
-    await service.removeLinkedBlock(block.id);
-    await service.detachBlock(block.id);
-    await service.detachAllLinks();
-    expect(calls, isEmpty);
+    expect(await service.hasWriteAccess(), isTrue);
+    expect(await service.requestWriteAccess(), isTrue);
+    expect(await service.isLinked(block.id), isTrue);
+    await service.upsertBlock(block);
+
+    expect(calls.map((call) => call.method), [
+      'hasAccess',
+      'requestAccess',
+      'isLinked',
+      'upsert',
+    ]);
   });
+
+  test(
+    'unsupported desktop platforms never touch the native write channel',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+
+      expect(await service.hasWriteAccess(), isFalse);
+      expect(await service.requestWriteAccess(), isFalse);
+      expect(await service.isLinked(block.id), isFalse);
+      await service.removeLinkedBlock(block.id);
+      await service.detachBlock(block.id);
+      await service.detachAllLinks();
+      expect(calls, isEmpty);
+    },
+  );
 }

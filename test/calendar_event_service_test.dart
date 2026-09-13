@@ -69,11 +69,60 @@ void main() {
     expect(calls.single.arguments, {'reminderId': 'reminder-1'});
   });
 
-  test('unmanaged platforms do not attempt linked event deletion', () async {
+  test('iOS reminder calendar links use the managed native bridge', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+
+    await service.addReminderToCalendar(
+      reminderId: 'reminder-1',
+      title: 'Water plants',
+      body: '',
+      scheduledAt: date,
+      repeat: RepeatType.daily,
+    );
+    await service.updateLinkedReminder(
+      reminderId: 'reminder-1',
+      title: 'Water plants',
+      body: '',
+      scheduledAt: date,
+      repeat: RepeatType.weekly,
+    );
     await service.removeReminderFromCalendar('reminder-1');
-    expect(calls, isEmpty);
+
+    expect(calls.map((call) => call.method), [
+      'upsert',
+      'updateLinked',
+      'remove',
+    ]);
   });
+
+  test(
+    'iOS preserves the existing custom-interval calendar limitation',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+
+      await expectLater(
+        service.addReminderToCalendar(
+          reminderId: 'reminder-1',
+          title: 'Water plants',
+          body: '',
+          scheduledAt: date,
+          repeat: RepeatType.interval,
+          repeatIntervalMinutes: 90,
+        ),
+        throwsA(isA<UnsupportedError>()),
+      );
+      expect(calls, isEmpty);
+    },
+  );
+
+  test(
+    'unmanaged desktop platforms do not attempt linked event deletion',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      await service.removeReminderFromCalendar('reminder-1');
+      expect(calls, isEmpty);
+    },
+  );
 
   test(
     'permission failure is surfaced, not reported as successful export',

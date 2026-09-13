@@ -7,7 +7,9 @@ class DeviceScheduleCalendarService {
   static const _channel = MethodChannel('com.tori.pulse/calendar_schedule');
 
   bool get isSupported =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
   Future<bool> hasWriteAccess() async {
     if (!isSupported) return false;
@@ -30,7 +32,7 @@ class DeviceScheduleCalendarService {
   Future<void> upsertBlock(ScheduleBlock block) async {
     if (!isSupported) {
       throw UnsupportedError(
-        'Managed JotCue schedule calendar entries are Android-only.',
+        'Managed JotCue schedule calendar entries are unavailable on this platform.',
       );
     }
     if (!block.isValid) {

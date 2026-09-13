@@ -13,13 +13,13 @@ planning signals.
 - Plan workspace for projects, deadlines, priorities, effort, and flexibility
 - Pulse workspace for deterministic daily focus and attention cues
 - Ask JotCue: a local-first conversational planning view with optional Hybrid AI fallback and preview-first Task completion, Task priority, and local schedule-move actions
-- Read-only Android calendar availability and deterministic scheduling proposals
+- Read-only Android/iOS calendar availability and deterministic scheduling proposals
 - Derived on-device Personal Graph across Notes, Tasks, Projects, deadlines, and accepted schedule blocks
 - User-defined planning windows, breaks, daily focus limits, and protected lunch
 - User-approved JotCue schedule blocks stored locally on the device
 - Trusted foreground-only local schedule moves in Plan, gated by assistant permissions and recorded in a device-local audit trail
 - Smart reminder phrase parsing
-- Local notifications and calendar export
+- Local notifications, managed Android/iOS calendar links, and review-first text sharing
 - Profile and application settings
 - Offline-first note reads and writes
 - Automatic synchronization when connectivity returns
@@ -112,3 +112,6 @@ Ask JotCue can optionally use a build-configured HTTPS gateway after determinist
 
 ### Cross-device schedule sync (Patch 23)
 Accepted JotCue schedule blocks now synchronize across signed-in devices while retaining a local Sembast cache for offline use. Every cloud-backed block has a monotonic revision. Offline changes queue with the revision they were based on and are applied transactionally only if the server is still at that revision. If another device changed or deleted the same block first, JotCue keeps the newer synced state and records a local Schedule sync review item instead of silently overwriting it. If independently-created synced blocks overlap, JotCue also surfaces that overlap for explicit review rather than treating the double-booking as healthy. Existing revision-0 device-local blocks are queued for first upload on the next successful sync. Device calendar events remain external/local and are never silently updated by cross-device block sync.
+
+### iOS native parity (Patch 24)
+JotCue now uses the same bounded calendar-read, managed reminder-calendar, managed schedule-calendar, Share-to-JotCue, and notification-action contracts on iOS as on Android. EventKit access stays device-local; external calendar contents are used only as busy-time inputs and are never uploaded by this path. Calendar writes remain explicit and ownership-scoped. The iOS Share Extension queues only user-selected text/links through an App Group for the existing review-first Quick Capture flow; receiving a share never creates application data by itself.

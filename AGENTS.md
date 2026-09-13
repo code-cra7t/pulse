@@ -16,7 +16,7 @@ Current product surfaces:
 - Pulse (deterministic daily focus and attention cues)
 - Ask JotCue (deterministic on-device planning assistant with narrowly typed, preview-first actions)
 - Personal Graph (derived local relationships across notes, tasks, projects, deadlines, and accepted schedule blocks)
-- External text sharing into the review-first Quick Capture flow (Android)
+- External text sharing into the review-first Quick Capture flow (Android and iOS)
 - Suggested scheduling (explicit availability + local calendar busy time + user-approved accepted JotCue blocks with an offline local cache)
 - Adaptive replanning (reviewable drift/conflict/deadline-capacity suggestions)
 - Settings / profile
@@ -48,14 +48,14 @@ Calendar / availability rules:
 - Scheduling proposals are suggestions only. External calendar writes require explicit user confirmation and calendar-write permission; never write or update schedule entries silently.
 - Schedule-block calendar links must remain separate from reminder calendar links and may only own events created for that exact JotCue block.
 - Rescheduling a linked block must not silently update the external calendar; offer an explicit update choice.
-- Accepted JotCue schedule blocks are device-local until cross-device scheduling conflict semantics are designed.
+- Accepted JotCue schedule blocks sync through the signed-in account using revision-checked conflict semantics; the local cache, device calendar links, trusted-automation safety state, and automation audit remain device-local.
 - Adaptive replanning is advisory by default. Never silently mark a block completed/missed. Trusted execution may move only one future flexible JotCue proposal block at a time while Plan is open, only after the stored automation policy returns trustedEligible, only when the block is not linked to an external calendar, and only from a fresh deterministic suggestion. Recompute before any next move.
 - Non-flexible tasks may be flagged when their accepted block conflicts, but JotCue must not offer an automatic move suggestion for them.
 - Scheduling preferences may sync through the existing user settings document, but calendar event contents must remain local/in-memory.
 
 
 External-context rules:
-- Android text shares are review inputs only. Receiving shared content must not create or persist a note, task, project, reminder, or calendar entry without explicit user confirmation.
+- Android/iOS text shares are review inputs only. Receiving shared content must not create or persist a note, task, project, reminder, or calendar entry without explicit user confirmation.
 - Keep share ingestion local and transient until the user confirms a save/create action. Do not upload shared content merely because another app sent it to JotCue.
 - Reuse the existing Quick Capture parser/service rather than creating a second task/project source of truth.
 - External API integrations (Gmail, Google Calendar cloud APIs, etc.) require separate privacy/scoping work and must not be smuggled into share-intent patches.
@@ -132,3 +132,13 @@ Trusted automation rules:
 - Cross-device block sync must never silently update, delete, or create a device-calendar event. Calendar writes remain an explicit local approval flow.
 - Do not deploy Firestore rules unless explicitly instructed.
 - Detect newly introduced overlaps among synced canonical blocks and surface them for review; never silently treat a cross-device double-booking as healthy.
+
+
+## Patch 24 iOS parity guardrails
+- iOS calendar reads use EventKit full access only after explicit permission and remain bounded to the same 31-day near-term window. Never upload third-party calendar event contents.
+- Managed reminder and schedule calendar links on iOS may update/delete only EventKit events whose stored event identifier and JotCue ownership marker both still match. If ownership cannot be verified, fail closed.
+- iOS Share-to-JotCue uses the `group.com.tori.pulse.share` App Group only as a capped transient handoff queue. The extension must never read or write the app database.
+- Share Extension activation stays text/URL scoped. Shared input always opens the existing review-first capture flow and never persists merely because it was shared.
+- Cross-device schedule sync never grants permission to modify a local iOS calendar copy. Calendar writes remain explicit local actions.
+- Keep iOS reminder notification actions on the existing Flutter notification response path; notification actions may snooze/dismiss/navigate but must not broaden automation authority.
+- Changes to the Share Extension require an iOS simulator build in addition to the normal analyzer/test/Android verification gate. Device distribution also requires the App Group capability to be provisioned for both Runner and ShareExtension.

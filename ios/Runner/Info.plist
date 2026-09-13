@@ -16,6 +16,16 @@
 				<string>com.googleusercontent.apps.698582903261-9npfd24vsdummj0719lto6umj3q5di02</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.tori.pulse.share</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>jotcue</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleDisplayName</key>
 	<string>JotCue</string>
@@ -42,9 +52,7 @@
 	<key>NSUserNotificationUsageDescription</key>
 	<string>JotCue uses notifications for note reminders.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>JotCue adds reminders to your calendar so they also appear on your device.</string>
-	<key>NSContactsUsageDescription</key>
-	<string>JotCue may open the calendar app when adding reminder events.</string>
+	<string>JotCue uses your calendar to understand busy time and, only with your approval, manage calendar copies of JotCue reminders and focus blocks.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
@@ -87,5 +95,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>JotCue reads busy calendar time on this device and manages only the calendar entries you explicitly link from JotCue.</string>
 </dict>
 </plist>
