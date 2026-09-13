@@ -119,5 +119,5 @@ String _description(AutomationLevel level) => switch (level) {
   AutomationLevel.approval =>
     'JotCue may prepare a concrete change, but must ask before applying it.',
   AutomationLevel.trusted =>
-    'Allow supported low-risk local schedule moves while Plan is open. Calendar-linked blocks and sensitive decisions still require approval.',
+    'Allow supported low-risk local schedule moves while Plan is open. Ask JotCue still previews conversational changes and waits for Apply; calendar writes and sensitive decisions remain approval-only.',
 };

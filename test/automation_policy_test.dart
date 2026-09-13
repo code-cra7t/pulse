@@ -79,4 +79,14 @@ void main() {
       AutomationDecision.requiresApproval,
     );
   });
+
+  test('trusted task planning updates still require approval', () {
+    expect(
+      evaluate(
+        AutomationLevel.trusted,
+        AutomationActionKind.taskPlanningUpdate,
+      ),
+      AutomationDecision.requiresApproval,
+    );
+  });
 }

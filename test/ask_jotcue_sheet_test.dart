@@ -4,6 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pulse/core/services/app_theme.dart';
 import 'package:pulse/features/assistant/models/ask_jotcue.dart';
 import 'package:pulse/features/assistant/presentation/ask_jotcue_sheet.dart';
+import 'package:pulse/features/automation/models/automation_preferences.dart';
+import 'package:pulse/features/automation/providers/automation_providers.dart';
+import 'package:pulse/features/tasks/models/task.dart';
 import 'package:pulse/features/pulse/models/daily_pulse_loop.dart';
 import 'package:pulse/features/pulse/models/pulse_overview.dart';
 
@@ -18,13 +21,13 @@ void main() {
     focusEstimatedMinutes: 0,
   );
 
-  AskJotCueContext assistantContext() {
+  AskJotCueContext assistantContext({List<Task> tasks = const <Task>[]}) {
     final now = DateTime(2026, 9, 13, 10);
     return AskJotCueContext(
       now: now,
       pulse: pulse,
       dailyLoop: DailyPulseLoop.build(now: now, pulse: pulse, blocks: const []),
-      tasks: const [],
+      tasks: tasks,
       projects: const [],
       blocks: const [],
     );
@@ -39,6 +42,12 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [
+          automationPreferencesProvider.overrideWith(
+            (ref) =>
+                const AutomationPreferences(level: AutomationLevel.suggest),
+          ),
+        ],
         child: MaterialApp(
           theme: AppTheme.build(),
           home: Scaffold(
@@ -50,10 +59,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Ask JotCue'), findsOneWidget);
-    expect(
-      find.text('Read-only planning assistant · on device'),
-      findsOneWidget,
-    );
+    expect(find.text('Planning assistant · on device'), findsOneWidget);
     expect(find.byIcon(Icons.auto_awesome_rounded), findsOneWidget);
     expect(find.byIcon(Icons.smart_toy_outlined), findsNothing);
     expect(tester.takeException(), isNull);
@@ -64,6 +70,12 @@ void main() {
   ) async {
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [
+          automationPreferencesProvider.overrideWith(
+            (ref) =>
+                const AutomationPreferences(level: AutomationLevel.suggest),
+          ),
+        ],
         child: MaterialApp(
           theme: AppTheme.build(),
           home: Scaffold(
@@ -89,6 +101,12 @@ void main() {
   ) async {
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [
+          automationPreferencesProvider.overrideWith(
+            (ref) =>
+                const AutomationPreferences(level: AutomationLevel.suggest),
+          ),
+        ],
         child: MaterialApp(
           theme: AppTheme.build(),
           home: Scaffold(
@@ -106,6 +124,107 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('I don’t safely understand'), findsOneWidget);
-    expect(find.textContaining('does not change tasks'), findsOneWidget);
+    expect(
+      find.textContaining('Unsupported requests never change anything'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('suggest mode shows action preview but keeps Apply disabled', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final task = Task(
+      id: 'task',
+      userId: 'user',
+      title: 'Revise chapter 4',
+      isCompleted: false,
+      sourceNoteId: 'note',
+      sourceLineIndex: 0,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          automationPreferencesProvider.overrideWith(
+            (ref) =>
+                const AutomationPreferences(level: AutomationLevel.suggest),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.build(),
+          home: Scaffold(
+            body: AskJotCueSheet(
+              assistantContext: assistantContext(tasks: [task]),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('ask-jotcue-field')),
+      'Mark Revise chapter 4 done',
+    );
+    await tester.tap(find.byKey(const ValueKey('ask-jotcue-send')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mark complete'), findsOneWidget);
+    expect(find.text('Suggestion only'), findsWidgets);
+    final apply = tester.widget<FilledButton>(
+      find.byKey(const ValueKey('ask-jotcue-apply-completion:task:true')),
+    );
+    expect(apply.onPressed, isNull);
+  });
+
+  testWidgets('observe mode explains boundary without exposing action card', (
+    tester,
+  ) async {
+    final task = Task(
+      id: 'task',
+      userId: 'user',
+      title: 'Revise chapter 4',
+      isCompleted: false,
+      sourceNoteId: 'note',
+      sourceLineIndex: 0,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          automationPreferencesProvider.overrideWith(
+            (ref) =>
+                const AutomationPreferences(level: AutomationLevel.observe),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.build(),
+          home: Scaffold(
+            body: AskJotCueSheet(
+              assistantContext: assistantContext(tasks: [task]),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('ask-jotcue-field')),
+      'Mark Revise chapter 4 done',
+    );
+    await tester.tap(find.byKey(const ValueKey('ask-jotcue-send')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Observe mode does not prepare'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('ask-jotcue-action-completion:task:true')),
+      findsNothing,
+    );
   });
 }

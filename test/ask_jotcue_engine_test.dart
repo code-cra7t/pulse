@@ -240,7 +240,7 @@ void main() {
     expect(answer.text, contains('1 open task'));
   });
 
-  test('unsupported requests are explicitly bounded and read-only', () {
+  test('unsupported requests are explicitly bounded', () {
     final answer = engine.answer(
       query: 'Write an email to my lecturer',
       context: context(),
@@ -248,6 +248,89 @@ void main() {
 
     expect(answer.intent, AskJotCueIntent.unknown);
     expect(answer.text, contains('I don’t safely understand'));
-    expect(answer.text, contains('Nothing is changed'));
+    expect(answer.text, contains('Unsupported requests never change anything'));
+  });
+
+  test(
+    'completion request produces an exact preview without mutating state',
+    () {
+      final answer = engine.answer(
+        query: 'Mark Revise chapter 4 done',
+        context: context(),
+      );
+
+      expect(answer.intent, AskJotCueIntent.action);
+      expect(answer.actionProposal, isNotNull);
+      expect(answer.actionProposal!.kind, AskJotCueActionKind.taskCompletion);
+      expect(answer.actionProposal!.taskId, 'task');
+      expect(answer.actionProposal!.targetCompletion, isTrue);
+      expect(answer.text, contains('Nothing has changed yet'));
+    },
+  );
+
+  test('ambiguous task action never guesses a target', () {
+    final answer = engine.answer(
+      query: 'Mark Report done',
+      context: context(
+        tasks: [
+          task(id: 'one', title: 'Report draft'),
+          task(id: 'two', title: 'Report review'),
+        ],
+      ),
+    );
+
+    expect(answer.intent, AskJotCueIntent.action);
+    expect(answer.actionProposal, isNull);
+    expect(answer.text, contains('More than one Task matches'));
+  });
+
+  test('priority request produces task planning preview', () {
+    final answer = engine.answer(
+      query: 'Set Revise chapter 4 priority critical',
+      context: context(),
+    );
+
+    expect(answer.actionProposal, isNotNull);
+    expect(answer.actionProposal!.kind, AskJotCueActionKind.taskPriority);
+    expect(answer.actionProposal!.targetPriority, PriorityLevel.critical);
+    expect(answer.actionProposal!.previewText, contains('critical priority'));
+  });
+
+  test('schedule move preserves duration and targets a future time', () {
+    final answer = engine.answer(
+      query: 'Move Revise chapter 4 tomorrow at 15:30',
+      context: context(),
+    );
+
+    final proposal = answer.actionProposal;
+    expect(proposal, isNotNull);
+    expect(proposal!.kind, AskJotCueActionKind.scheduleMove);
+    expect(proposal.toStartsAt, DateTime(2026, 9, 14, 15, 30));
+    expect(proposal.toEndsAt, DateTime(2026, 9, 14, 16, 30));
+  });
+
+  test('schedule move refuses a target occupied by another accepted block', () {
+    final answer = engine.answer(
+      query: 'Move Revise chapter 4 tomorrow at 15:00',
+      context: context(
+        blocks: [
+          block(),
+          ScheduleBlock(
+            id: 'other',
+            userId: 'user',
+            taskId: 'other-task',
+            title: 'Other work',
+            startsAt: DateTime(2026, 9, 14, 15, 30),
+            endsAt: DateTime(2026, 9, 14, 16, 30),
+            createdAt: DateTime(2026, 9, 12),
+            updatedAt: DateTime(2026, 9, 12),
+          ),
+        ],
+      ),
+    );
+
+    expect(answer.actionProposal, isNull);
+    expect(answer.title, 'That time is already occupied');
+    expect(answer.text, contains('overlaps'));
   });
 }

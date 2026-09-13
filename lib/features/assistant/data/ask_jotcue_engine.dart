@@ -3,9 +3,10 @@ import '../../scheduling/models/schedule_block.dart';
 import '../../tasks/models/task.dart';
 import '../models/ask_jotcue.dart';
 
-/// Deterministic, read-only assistant over JotCue's existing planning state.
+/// Deterministic assistant over JotCue's existing planning state.
 ///
-/// This intentionally does not call a network model and never mutates data.
+/// This engine never mutates data. It may prepare a narrowly typed action
+/// preview; execution is handled separately behind automation permissions.
 class AskJotCueEngine {
   const AskJotCueEngine();
 
@@ -13,8 +14,14 @@ class AskJotCueEngine {
     required String query,
     required AskJotCueContext context,
   }) {
+    final action = _actionAnswer(query, context);
+    if (action != null) {
+      return action;
+    }
+
     final intent = classify(query);
     return switch (intent) {
+      AskJotCueIntent.action => _unknown(),
       AskJotCueIntent.focusNow => _focus(context),
       AskJotCueIntent.dueSoon => _dueSoon(context),
       AskJotCueIntent.overdue => _overdue(context),
@@ -35,6 +42,7 @@ class AskJotCueEngine {
           'help',
           'what can you do',
           'what can i ask',
+          'what can you change',
           'how can you help',
         ])) {
       return AskJotCueIntent.help;
@@ -118,6 +126,299 @@ class AskJotCueEngine {
     }
 
     return AskJotCueIntent.unknown;
+  }
+
+  AskJotCueAnswer? _actionAnswer(String query, AskJotCueContext context) {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return null;
+
+    final completion = _completionAction(trimmed, context);
+    if (completion != null) return completion;
+
+    final priority = _priorityAction(trimmed, context);
+    if (priority != null) return priority;
+
+    final move = _scheduleMoveAction(trimmed, context);
+    if (move != null) return move;
+
+    return null;
+  }
+
+  AskJotCueAnswer? _completionAction(String query, AskJotCueContext context) {
+    final donePatterns = <RegExp>[
+      RegExp(
+        r'^mark\s+(.+?)\s+(?:done|complete|completed)$',
+        caseSensitive: false,
+      ),
+      RegExp(r'^complete\s+(.+)$', caseSensitive: false),
+    ];
+    final reopenPatterns = <RegExp>[
+      RegExp(
+        r'^mark\s+(.+?)\s+(?:incomplete|open|not done)$',
+        caseSensitive: false,
+      ),
+      RegExp(r'^reopen\s+(.+)$', caseSensitive: false),
+    ];
+
+    for (final pattern in donePatterns) {
+      final match = pattern.firstMatch(query);
+      if (match == null) continue;
+      return _taskCompletionProposal(
+        context,
+        candidate: match.group(1) ?? '',
+        target: true,
+      );
+    }
+    for (final pattern in reopenPatterns) {
+      final match = pattern.firstMatch(query);
+      if (match == null) continue;
+      return _taskCompletionProposal(
+        context,
+        candidate: match.group(1) ?? '',
+        target: false,
+      );
+    }
+    return null;
+  }
+
+  AskJotCueAnswer _taskCompletionProposal(
+    AskJotCueContext context, {
+    required String candidate,
+    required bool target,
+  }) {
+    final resolution = _resolveTask(candidate, context.tasks);
+    if (resolution.task == null) {
+      return _taskResolutionAnswer(resolution, candidate);
+    }
+    final task = resolution.task!;
+    if (task.isCompleted == target) {
+      return AskJotCueAnswer(
+        intent: AskJotCueIntent.action,
+        title: target ? 'Already complete' : 'Already open',
+        text: target
+            ? '"${task.title}" is already complete.'
+            : '"${task.title}" is already open.',
+      );
+    }
+
+    final verb = target ? 'Mark complete' : 'Reopen task';
+    final proposal = AskJotCueActionProposal(
+      id: 'completion:${task.id}:$target',
+      kind: AskJotCueActionKind.taskCompletion,
+      userId: task.userId,
+      taskId: task.id,
+      taskTitle: task.title,
+      sourceNoteId: task.sourceNoteId,
+      targetCompletion: target,
+      previewTitle: verb,
+      previewText: target
+          ? 'Mark "${task.title}" complete in its source Note.'
+          : 'Mark "${task.title}" incomplete in its source Note.',
+    );
+    return AskJotCueAnswer(
+      intent: AskJotCueIntent.action,
+      title: 'Action preview',
+      text:
+          'I understand this as a Task completion change. Nothing has changed yet.',
+      actionProposal: proposal,
+    );
+  }
+
+  AskJotCueAnswer? _priorityAction(String query, AskJotCueContext context) {
+    final patterns = <RegExp>[
+      RegExp(
+        r'^(?:set|make)\s+(.+?)\s+priority\s+(?:to\s+)?(critical|high|medium|low|none)$',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'^set\s+priority\s+(?:of|for)\s+(.+?)\s+to\s+(critical|high|medium|low|none)$',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'^make\s+(.+?)\s+(critical|high|medium|low)\s+priority$',
+        caseSensitive: false,
+      ),
+    ];
+
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(query);
+      if (match == null) continue;
+      final resolution = _resolveTask(match.group(1) ?? '', context.tasks);
+      if (resolution.task == null) {
+        return _taskResolutionAnswer(resolution, match.group(1) ?? '');
+      }
+      final priority = _priorityFromWord(match.group(2));
+      final task = resolution.task!;
+      if (task.priority == priority) {
+        return AskJotCueAnswer(
+          intent: AskJotCueIntent.action,
+          title: 'No change needed',
+          text:
+              '"${task.title}" is already ${_priorityName(priority)} priority.',
+        );
+      }
+      final proposal = AskJotCueActionProposal(
+        id: 'priority:${task.id}:${priority.name}',
+        kind: AskJotCueActionKind.taskPriority,
+        userId: task.userId,
+        taskId: task.id,
+        taskTitle: task.title,
+        sourceNoteId: task.sourceNoteId,
+        targetPriority: priority,
+        previewTitle: 'Change priority',
+        previewText:
+            'Set "${task.title}" from ${_priorityName(task.priority)} to ${_priorityName(priority)} priority.',
+      );
+      return AskJotCueAnswer(
+        intent: AskJotCueIntent.action,
+        title: 'Action preview',
+        text:
+            'I understand this as a Task planning change. Nothing has changed yet.',
+        actionProposal: proposal,
+      );
+    }
+    return null;
+  }
+
+  AskJotCueAnswer? _scheduleMoveAction(String query, AskJotCueContext context) {
+    final pattern = RegExp(
+      r'^move\s+(.+?)\s+(?:to\s+)?(today|tomorrow|\d{4}-\d{2}-\d{2})\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$',
+      caseSensitive: false,
+    );
+    final match = pattern.firstMatch(query);
+    if (match == null) return null;
+
+    final candidate = match.group(1) ?? '';
+    final resolution = _resolveTask(candidate, context.tasks);
+    if (resolution.task == null) {
+      return _taskResolutionAnswer(resolution, candidate);
+    }
+    final task = resolution.task!;
+    final futureBlocks =
+        context.blocks
+            .where(
+              (block) =>
+                  block.taskId == task.id &&
+                  block.status == ScheduleBlockStatus.scheduled &&
+                  block.endsAt.isAfter(context.now),
+            )
+            .toList()
+          ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+
+    if (futureBlocks.isEmpty) {
+      return AskJotCueAnswer(
+        intent: AskJotCueIntent.action,
+        title: 'Nothing to move',
+        text:
+            '"${task.title}" does not have a future accepted JotCue schedule block.',
+      );
+    }
+    if (futureBlocks.length > 1) {
+      return AskJotCueAnswer(
+        intent: AskJotCueIntent.action,
+        title: 'Choose the block in Plan',
+        text:
+            '"${task.title}" has more than one future accepted block. Move the specific block from Plan so JotCue does not guess.',
+      );
+    }
+
+    final date = _parseMoveDate(match.group(2)!, context.now);
+    final hourMinute = _parseClock(
+      match.group(3)!,
+      match.group(4),
+      match.group(5),
+    );
+    if (date == null || hourMinute == null) {
+      return const AskJotCueAnswer(
+        intent: AskJotCueIntent.action,
+        title: 'I need a clearer time',
+        text:
+            'Use a future time like “tomorrow at 15:00” or “2026-09-15 at 3pm”.',
+      );
+    }
+    final targetStart = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      hourMinute.$1,
+      hourMinute.$2,
+    );
+    if (!targetStart.isAfter(context.now)) {
+      return const AskJotCueAnswer(
+        intent: AskJotCueIntent.action,
+        title: 'That time has passed',
+        text: 'Ask JotCue to move the block to a future time.',
+      );
+    }
+
+    final block = futureBlocks.single;
+    if (targetStart == block.startsAt) {
+      return AskJotCueAnswer(
+        intent: AskJotCueIntent.action,
+        title: 'No change needed',
+        text:
+            '"${task.title}" is already planned for ${_dateTime(targetStart)}.',
+      );
+    }
+    final targetEnd = targetStart.add(block.duration);
+    final conflict = context.blocks.any(
+      (other) =>
+          other.id != block.id &&
+          other.occupiesTime &&
+          other.startsAt.isBefore(targetEnd) &&
+          other.endsAt.isAfter(targetStart),
+    );
+    if (conflict) {
+      return AskJotCueAnswer(
+        intent: AskJotCueIntent.action,
+        title: 'That time is already occupied',
+        text:
+            'Another accepted JotCue block overlaps ${_dateTime(targetStart)}. Choose another time or review Plan.',
+      );
+    }
+
+    final proposal = AskJotCueActionProposal(
+      id: 'move:${block.id}:${targetStart.millisecondsSinceEpoch}',
+      kind: AskJotCueActionKind.scheduleMove,
+      userId: block.userId,
+      taskId: task.id,
+      taskTitle: task.title,
+      blockId: block.id,
+      fromStartsAt: block.startsAt,
+      fromEndsAt: block.endsAt,
+      toStartsAt: targetStart,
+      toEndsAt: targetEnd,
+      previewTitle: 'Move scheduled block',
+      previewText:
+          'Move "${task.title}" from ${_dateTime(block.startsAt)} to ${_dateTime(targetStart)}. Duration stays ${_formatMinutes(block.duration.inMinutes)}.',
+    );
+    return AskJotCueAnswer(
+      intent: AskJotCueIntent.action,
+      title: 'Action preview',
+      text:
+          'I found one accepted JotCue block to move. Nothing has changed yet.',
+      actionProposal: proposal,
+    );
+  }
+
+  AskJotCueAnswer _taskResolutionAnswer(
+    _TaskResolution resolution,
+    String candidate,
+  ) {
+    if (resolution.ambiguous) {
+      return AskJotCueAnswer(
+        intent: AskJotCueIntent.action,
+        title: 'Which Task?',
+        text:
+            'More than one Task matches "$candidate". Use the exact Task title so JotCue does not guess.',
+      );
+    }
+    return AskJotCueAnswer(
+      intent: AskJotCueIntent.action,
+      title: 'Task not found',
+      text:
+          'I could not find an exact or unique Task match for "$candidate". Nothing was changed.',
+    );
   }
 
   AskJotCueAnswer _focus(AskJotCueContext context) {
@@ -433,7 +734,10 @@ class AskJotCueEngine {
           '• How much time do I have today?\n'
           '• What’s next?\n'
           '• What needs attention?\n'
-          '• Which projects are active?',
+          '• Which projects are active?\n'
+          '• Mark Revise chapter 4 done\n'
+          '• Set Revise chapter 4 priority high\n'
+          '• Move Revise chapter 4 tomorrow at 15:00',
     );
   }
 
@@ -442,9 +746,105 @@ class AskJotCueEngine {
       intent: AskJotCueIntent.unknown,
       title: 'I can help with your plan',
       text:
-          'I don’t safely understand that request yet. For now, ask about focus, deadlines, overdue work, today’s capacity, your accepted schedule, active projects, or items that need review. Nothing is changed from this conversation.',
+          'I don’t safely understand that request yet. Ask about focus, deadlines, overdue work, capacity, schedules, projects, or review items. I can also preview a few explicit actions: Task completion, Task priority, and moving one accepted JotCue block. Unsupported requests never change anything.',
     );
   }
+}
+
+class _TaskResolution {
+  const _TaskResolution({this.task, this.ambiguous = false});
+
+  final Task? task;
+  final bool ambiguous;
+}
+
+_TaskResolution _resolveTask(String candidate, List<Task> tasks) {
+  final needle = _normalize(candidate);
+  if (needle.isEmpty) return const _TaskResolution();
+
+  final exact = tasks
+      .where((task) => _normalize(task.title) == needle)
+      .toList(growable: false);
+  if (exact.length == 1) return _TaskResolution(task: exact.single);
+  if (exact.length > 1) return const _TaskResolution(ambiguous: true);
+
+  final partial = tasks
+      .where((task) {
+        final title = _normalize(task.title);
+        return title.contains(needle) || needle.contains(title);
+      })
+      .toList(growable: false);
+  if (partial.length == 1) return _TaskResolution(task: partial.single);
+  if (partial.length > 1) return const _TaskResolution(ambiguous: true);
+  return const _TaskResolution();
+}
+
+PriorityLevel _priorityFromWord(String? value) {
+  return switch (value?.toLowerCase()) {
+    'critical' => PriorityLevel.critical,
+    'high' => PriorityLevel.high,
+    'medium' => PriorityLevel.medium,
+    'low' => PriorityLevel.low,
+    _ => PriorityLevel.none,
+  };
+}
+
+String _priorityName(PriorityLevel value) {
+  return switch (value) {
+    PriorityLevel.none => 'no',
+    PriorityLevel.low => 'low',
+    PriorityLevel.medium => 'medium',
+    PriorityLevel.high => 'high',
+    PriorityLevel.critical => 'critical',
+  };
+}
+
+DateTime? _parseMoveDate(String value, DateTime now) {
+  final normalized = value.toLowerCase();
+  if (normalized == 'today') {
+    return DateTime(now.year, now.month, now.day);
+  }
+  if (normalized == 'tomorrow') {
+    final tomorrow = now.add(const Duration(days: 1));
+    return DateTime(tomorrow.year, tomorrow.month, tomorrow.day);
+  }
+  final parts = value.split('-');
+  if (parts.length != 3) return null;
+  final year = int.tryParse(parts[0]);
+  final month = int.tryParse(parts[1]);
+  final day = int.tryParse(parts[2]);
+  if (year == null || month == null || day == null) return null;
+  final parsed = DateTime(year, month, day);
+  if (parsed.year != year || parsed.month != month || parsed.day != day) {
+    return null;
+  }
+  return parsed;
+}
+
+(int, int)? _parseClock(String hourText, String? minuteText, String? meridiem) {
+  var hour = int.tryParse(hourText);
+  final minute = int.tryParse(minuteText ?? '0');
+  if (hour == null || minute == null || minute < 0 || minute > 59) {
+    return null;
+  }
+  final suffix = meridiem?.toLowerCase();
+  if (suffix != null) {
+    if (hour < 1 || hour > 12) return null;
+    if (suffix == 'am') {
+      hour = hour == 12 ? 0 : hour;
+    } else {
+      hour = hour == 12 ? 12 : hour + 12;
+    }
+  } else if (hour < 0 || hour > 23) {
+    return null;
+  }
+  return (hour, minute);
+}
+
+String _dateTime(DateTime value) {
+  final month = value.month.toString().padLeft(2, '0');
+  final day = value.day.toString().padLeft(2, '0');
+  return '${value.year}-$month-$day ${_time(value)}';
 }
 
 String _normalize(String value) {

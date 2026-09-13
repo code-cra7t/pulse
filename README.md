@@ -12,7 +12,7 @@ planning signals.
 - Offline-first projects and task planning metadata
 - Plan workspace for projects, deadlines, priorities, effort, and flexibility
 - Pulse workspace for deterministic daily focus and attention cues
-- Ask JotCue: an on-device, read-only conversational view of current planning state
+- Ask JotCue: an on-device conversational planning view with preview-first Task completion, Task priority, and local schedule-move actions
 - Read-only Android calendar availability and deterministic scheduling proposals
 - Derived on-device Personal Graph across Notes, Tasks, Projects, deadlines, and accepted schedule blocks
 - User-defined planning windows, breaks, daily focus limits, and protected lunch
@@ -47,8 +47,7 @@ queued and replayed when connectivity returns. Note-backed task text remains
 in the note while planning metadata is stored against stable task identities.
 Scheduling preferences sync through the existing user settings document, while
 external calendar events stay local/in-memory and accepted JotCue schedule
-blocks currently remain device-local. Trusted automation activity also remains device-local. The Personal Graph is derived in memory from this structured state and is not persisted as a separate dataset. Ask JotCue currently derives answers on device
-from this structured state; conversations are ephemeral and no LLM/network call is made.
+blocks currently remain device-local. Trusted automation activity also remains device-local. The Personal Graph is derived in memory from this structured state and is not persisted as a separate dataset. Ask JotCue derives answers and its small set of typed action previews on device from this structured state; conversations are ephemeral and no LLM/network call is made. Sending a request never mutates data by itself; supported changes remain permission-gated and require an explicit Apply tap.
 
 ## Local setup
 
@@ -100,3 +99,7 @@ JotCue now derives an on-device Personal Graph from existing Notes, stable Tasks
 
 ### Dependencies and action cues (Patch 20)
 Tasks can explicitly depend on other stable JotCue Tasks or carry a human-authored "Waiting for" blocker. JotCue derives blocked/ready state, Project next actions, Personal Graph dependency edges, and scheduling eligibility from that metadata. Dependencies are never inferred from note prose, cycles/self-dependencies are rejected before save, and blocked Tasks are excluded from Pulse focus, new schedule proposals, and Trusted schedule moves until their blockers clear.
+
+
+### Ask JotCue Actions (Patch 21)
+Ask JotCue can deterministically interpret three explicit user commands: mark a stable Task complete/incomplete, change a Task priority, or move one future accepted JotCue schedule block to a specific future time. The assistant always shows a structured preview first. Observe exposes no executable action, Suggest remains preview-only, and Approval/Trusted require the user to tap Apply. Completion still rewrites only the source Note's task completion marker, priority remains hidden Task metadata, and schedule moves are revalidated against the current local block state. Calendar-linked blocks are refused in chat and must be handled from Plan so external calendar changes stay separately approved.

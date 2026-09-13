@@ -95,6 +95,16 @@ class _FakeTaskService implements TaskService {
   }) async {
     calls.add('update:$taskId');
   }
+
+  @override
+  Future<void> setCompletion({
+    required String userId,
+    required String noteId,
+    required String taskId,
+    required bool isCompleted,
+  }) async {
+    calls.add('completion:$taskId');
+  }
 }
 
 class _FakeProjectsRepository implements ProjectsRepository {

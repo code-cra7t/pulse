@@ -14,7 +14,7 @@ Current product surfaces:
 - Reminders (manual + smart)
 - Plan (projects + task planning metadata)
 - Pulse (deterministic daily focus and attention cues)
-- Ask JotCue (deterministic read-only assistant over the current plan)
+- Ask JotCue (deterministic on-device planning assistant with narrowly typed, preview-first actions)
 - Personal Graph (derived local relationships across notes, tasks, projects, deadlines, and accepted schedule blocks)
 - External text sharing into the review-first Quick Capture flow (Android)
 - Suggested scheduling (explicit availability + local calendar busy time + user-approved device-local blocks)
@@ -29,7 +29,7 @@ Rules:
 - Visible note content remains the source of truth for note-backed task text and completion.
 - Planning metadata must not rewrite visible note text.
 - Prefer deterministic planning logic before introducing AI-generated decisions.
-- Ask JotCue v1 is read-only, on-device, and ephemeral: no LLM/network calls, persisted chat history, or mutations from conversation.
+- Ask JotCue stays on-device and ephemeral: no LLM/network calls or persisted chat history. Patch 21 may prepare only narrowly typed Task completion, Task priority, and local accepted-block move previews. Typing a request never executes it.
 - Do not introduce a fixed bot-face avatar for Ask JotCue; use JotCue brand language until a later personalized assistant-identity system is explicitly designed.
 - Preserve offline-first behavior.
 - Do not deploy Firebase rules unless explicitly instructed.
@@ -62,7 +62,7 @@ External-context rules:
 
 Trusted automation rules:
 - Trusted execution is foreground-only in this version; do not add background workers or timers.
-- Only AutomationActionKind.localScheduleMove is trusted-eligible. External calendar writes, work review decisions, and structured capture creation always require approval.
+- Only AutomationActionKind.localScheduleMove is trusted-eligible. External calendar writes, work review decisions, structured capture creation, and Task planning updates always require approval.
 - Trusted moves must fail closed when calendar-link state cannot be verified, when the source block is stale, when the task is missing/non-flexible/completed, or when the block was user-created.
 - Execute at most one move per replanning snapshot, then recompute availability/replanning before considering another.
 - Every successful trusted move must be appended to the device-local automation audit store. Do not upload the audit trail unless a later privacy-reviewed design explicitly introduces sync.
@@ -100,3 +100,13 @@ Trusted automation rules:
 - Blocked Tasks must not enter Pulse focus, new deterministic scheduling proposals, or Trusted local schedule moves. Existing accepted schedule blocks remain user-visible and are not silently deleted.
 - Personal Graph dependency edges are derived read-only relationships; Notes/Task identity metadata remain authoritative.
 - Keep dependency metadata backward-compatible: absent fields deserialize to no dependencies/no waiting blocker. Do not change visible Note text.
+
+
+## Patch 21 Ask JotCue action guardrails
+- Parsing and execution are separate. The deterministic parser may prepare only Task completion/incompletion, Task priority, and moving one accepted JotCue block to a specific future time.
+- Every conversational mutation must be previewed before execution. Ask JotCue never mutates merely because the user pressed Send.
+- Observe mode must not expose an executable proposal. Suggest mode may show a non-executable preview. Approval and Trusted may expose Apply, but Ask JotCue still requires that explicit tap.
+- Completion/incompletion uses the source Note checkbox/task line as the source of truth. Task priority uses hidden Task identity metadata. Schedule moves revalidate the exact block snapshot before mutation.
+- Calendar-linked schedule blocks must fail closed in Ask JotCue and route the user to Plan; Patch 21 does not add calendar writes from conversation.
+- Ambiguous Task names, multiple future blocks for one Task, stale block state, past target times, occupied target times, or calendar-link verification failures must never be guessed through.
+- Ask JotCue actions are user-initiated and do not broaden foreground Trusted automation, background execution, or the device-local trusted audit contract.

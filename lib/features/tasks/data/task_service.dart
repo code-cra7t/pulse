@@ -1,4 +1,5 @@
 import '../../notes/data/notes_service.dart';
+import '../../notes/utils/task_parser.dart';
 import '../models/task_metadata_update.dart';
 import 'task_dependency_analyzer.dart';
 import 'task_metadata_editor.dart';
@@ -51,6 +52,47 @@ class TaskService {
     }
 
     await _notesService.updateNote(updatedNote);
+  }
+
+  Future<void> setCompletion({
+    required String userId,
+    required String noteId,
+    required String taskId,
+    required bool isCompleted,
+  }) async {
+    final note = await _notesService.readLocalNote(userId, noteId);
+    if (note == null) {
+      throw StateError('Note $noteId was not found for task $taskId.');
+    }
+    final identity = note.taskIdentities.where((item) => item.id == taskId);
+    if (identity.isEmpty) {
+      throw StateError('Task $taskId is no longer attached to note $noteId.');
+    }
+
+    final lineIndex = identity.first.lineIndex;
+    final tasks = TaskParser.extractTasks(
+      note.content,
+      identities: note.taskIdentities,
+    );
+    final matching = tasks.where((task) => task.id == taskId);
+    if (matching.isEmpty || matching.first.lineIndex != lineIndex) {
+      throw StateError(
+        'Task $taskId changed before completion could be updated.',
+      );
+    }
+    if (matching.first.isCompleted == isCompleted) {
+      return;
+    }
+
+    final updatedContent = TaskParser.setTaskCompletion(
+      note.content,
+      lineIndex,
+      isCompleted,
+    );
+    if (updatedContent == note.content) {
+      throw StateError('Task $taskId could not be updated safely.');
+    }
+    await _notesService.updateNote(note.copyWith(content: updatedContent));
   }
 
   /// Clears references to [projectId] from all locally known note-backed Tasks.

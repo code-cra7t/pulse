@@ -5,6 +5,7 @@ enum AutomationActionKind {
   externalCalendarWrite,
   workReviewDecision,
   structuredCaptureCreate,
+  taskPlanningUpdate,
 }
 
 enum AutomationDecision {
@@ -43,7 +44,8 @@ class AutomationPolicy {
     return switch (action) {
       AutomationActionKind.externalCalendarWrite ||
       AutomationActionKind.workReviewDecision ||
-      AutomationActionKind.structuredCaptureCreate => true,
+      AutomationActionKind.structuredCaptureCreate ||
+      AutomationActionKind.taskPlanningUpdate => true,
       AutomationActionKind.localScheduleMove => false,
     };
   }
