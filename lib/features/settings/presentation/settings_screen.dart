@@ -10,6 +10,9 @@ import '../../automation/models/automation_safety_preferences.dart';
 import '../../automation/presentation/automation_preferences_sheet.dart';
 import '../../automation/presentation/automation_safety_sheet.dart';
 import '../../automation/providers/trusted_automation_providers.dart';
+import '../../attention/models/attention_preferences.dart';
+import '../../attention/presentation/attention_preferences_sheet.dart';
+import '../../attention/providers/attention_providers.dart';
 import '../../auth/providers/account_deletion_provider.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../notes/models/note_category.dart';
@@ -41,6 +44,9 @@ class SettingsScreen extends ConsumerWidget {
     final automationSafety =
         ref.watch(automationSafetyPreferencesProvider).asData?.value ??
         const AutomationSafetyPreferences();
+    final attentionPreferences =
+        ref.watch(attentionPreferencesProvider).asData?.value ??
+        const AttentionPreferences();
     final tasks = ref.watch(tasksProvider);
     final projects =
         ref.watch(projectsStreamProvider).asData?.value ?? const <Project>[];
@@ -320,6 +326,34 @@ class SettingsScreen extends ConsumerWidget {
                           ref
                               .read(userSettingsRepositoryProvider)
                               .updateNotificationsEnabled(user.uid, enabled)
+                              .catchError(
+                                (error) => _showError(messenger, error),
+                              );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        key: const ValueKey('proactive-attention-setting'),
+                        leading: const Icon(
+                          Icons.notifications_active_outlined,
+                        ),
+                        title: const Text('Proactive attention'),
+                        subtitle: Text(
+                          attentionPreferences.enabled
+                              ? 'Morning Pulse, closing, deadlines, and planning cues'
+                              : 'Off on this device',
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () async {
+                          final updated = await showAttentionPreferencesSheet(
+                            context: context,
+                            initial: attentionPreferences,
+                          );
+                          if (updated == null || !context.mounted) return;
+                          final messenger = ScaffoldMessenger.of(context);
+                          ref
+                              .read(offlineAttentionStoreProvider)
+                              .writePreferences(user.uid, updated)
                               .catchError(
                                 (error) => _showError(messenger, error),
                               );

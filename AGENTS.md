@@ -74,3 +74,11 @@ Trusted automation rules:
 - Undo is user-initiated only. It must reject stale/currently changed blocks, linked calendar copies, past original slots, and conflicting original slots.
 - Audit cleanup must preserve pending/undo-pending entries and any applied move/undo still inside the cooldown window.
 - Do not broaden Trusted to calendar writes, capture creation, completion/missed decisions, or background execution without a separately reviewed patch.
+
+## Patch 18 proactive-attention guardrails
+- Keep attention notifications separate from reminder alarms and their IDs/channels.
+- Attention decisions remain deterministic/local; do not add LLM or engagement-style notifications.
+- Respect the account notification master switch plus device-local attention preferences and quiet hours.
+- Notification taps may navigate to Pulse or Plan only; they must not mutate tasks, schedule blocks, reminders, or calendars.
+- Throttle unchanged schedule-attention signatures and cap imminent deadline cues.
+- Do not introduce a background task executor as part of proactive attention.

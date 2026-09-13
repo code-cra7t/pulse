@@ -6,6 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pulse/core/services/alarm_handoff_service.dart';
 import 'package:pulse/core/services/local_notifications_service.dart';
+import 'package:pulse/features/attention/models/attention_plan.dart';
 import 'package:pulse/features/reminders/models/repeat_type.dart';
 
 void main() {
@@ -127,6 +128,59 @@ void main() {
       expect(calls.singleWhere((c) => c.method == 'dismissAlert').arguments, {
         'id': 42,
       });
+    },
+  );
+
+  test(
+    'attention cue uses dedicated inexact channel without exact alarm request',
+    () async {
+      await service.scheduleAttentionNotification(
+        AttentionNotificationPlan(
+          id: 1810000001,
+          kind: AttentionKind.morningPulse,
+          title: 'Morning Pulse',
+          body: 'Review your day.',
+          scheduledAt: DateTime.now().add(const Duration(hours: 1)),
+          destination: AttentionDestination.pulse,
+        ),
+      );
+      expect(
+        calls.where((c) => c.method == 'requestExactAlarmsPermission'),
+        isEmpty,
+      );
+      final scheduled = calls.singleWhere((c) => c.method == 'zonedSchedule');
+      expect(scheduled.arguments['id'], 1810000001);
+      final payload =
+          jsonDecode(scheduled.arguments['payload'] as String)
+              as Map<String, dynamic>;
+      expect(payload['type'], 'attention');
+      expect(payload['destination'], 'pulse');
+    },
+  );
+
+  test(
+    'cold-launch attention tap routes to Plan instead of selecting a note',
+    () async {
+      launchResponse = {
+        'notificationId': 1810000010,
+        'actionId': '',
+        'notificationResponseType': 0,
+        'payload': jsonEncode({
+          'type': 'attention',
+          'destination': 'plan',
+          'kind': 'scheduleIssue',
+          'notificationId': 1810000010,
+          'title': 'Your schedule needs attention',
+          'body': 'Review Plan',
+        }),
+      };
+      final cold = LocalNotificationsService(FlutterLocalNotificationsPlugin());
+      final destinations = <AttentionDestination>[];
+      cold.attentionDestinations.listen(destinations.add);
+      await cold.initialize();
+      await Future<void>.delayed(Duration.zero);
+      expect(destinations, [AttentionDestination.plan]);
+      expect(cold.selectedNoteId, isNull);
     },
   );
 

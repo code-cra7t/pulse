@@ -8,6 +8,7 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../../features/attention/models/attention_plan.dart';
 import '../../features/reminders/models/repeat_type.dart';
 import '../../features/reminders/models/reminder.dart';
 import '../../features/reminders/models/reminder_text.dart';
@@ -27,21 +28,33 @@ class LocalNotificationsService {
   static const String _reminderChannelName = 'JotCue reminder alerts';
   static const String _reminderChannelDescription =
       'Sound, vibration, and pop-up alerts for JotCue reminders';
+  static const String _attentionChannelId = 'jotcue_attention_v1';
+  static const String _attentionChannelName = 'JotCue attention';
+  static const String _attentionChannelDescription =
+      'Helpful planning, deadline, Morning Pulse, and Daily Closing cues';
 
   final FlutterLocalNotificationsPlugin _plugin;
   final StreamController<String?> _selectedNoteController =
       StreamController<String?>.broadcast();
   final StreamController<InAppReminderAlert> _inAppAlertController =
       StreamController<InAppReminderAlert>.broadcast();
+  final StreamController<AttentionDestination> _attentionDestinationController =
+      StreamController<AttentionDestination>.broadcast();
   final Map<int, Timer> _webTimers = <int, Timer>{};
 
   bool _initialized = false;
-  bool _permissionsRequested = false;
+  bool _notificationPermissionRequested = false;
+  bool _exactAlarmPermissionRequested = false;
   String? _selectedNoteId;
+  AttentionDestination? _selectedAttentionDestination;
 
   Stream<String?> get selectedNoteStream => _selectedNoteController.stream;
   Stream<InAppReminderAlert> get inAppAlerts => _inAppAlertController.stream;
+  Stream<AttentionDestination> get attentionDestinations =>
+      _attentionDestinationController.stream;
   String? get selectedNoteId => _selectedNoteId;
+  AttentionDestination? get selectedAttentionDestination =>
+      _selectedAttentionDestination;
 
   Future<NotificationReadiness> ensureReady() async {
     if (!_initialized) {
@@ -134,6 +147,22 @@ class LocalNotificationsService {
           ),
         );
 
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(
+          const AndroidNotificationChannel(
+            _attentionChannelId,
+            _attentionChannelName,
+            description: _attentionChannelDescription,
+            importance: Importance.defaultImportance,
+            playSound: true,
+            enableVibration: false,
+            showBadge: false,
+          ),
+        );
+
     _initialized = true;
     debugPrint('[Notifications] initialized; timezone=${tz.local.name}');
 
@@ -144,8 +173,10 @@ class LocalNotificationsService {
     }
   }
 
-  Future<void> requestPermissions() async {
-    if (kIsWeb || _permissionsRequested) {
+  Future<void> requestPermissions({bool exactAlarms = true}) async {
+    if (kIsWeb) return;
+    if (_notificationPermissionRequested &&
+        (!exactAlarms || _exactAlarmPermissionRequested)) {
       return;
     }
 
@@ -156,8 +187,12 @@ class LocalNotificationsService {
     bool? notificationPermission;
     bool? exactAlarmPermission;
     if (android != null) {
-      notificationPermission = await android.requestNotificationsPermission();
-      exactAlarmPermission = await android.requestExactAlarmsPermission();
+      if (!_notificationPermissionRequested) {
+        notificationPermission = await android.requestNotificationsPermission();
+      }
+      if (exactAlarms && !_exactAlarmPermissionRequested) {
+        exactAlarmPermission = await android.requestExactAlarmsPermission();
+      }
       debugPrint(
         '[Notifications] permission result: '
         'notifications=$notificationPermission, '
@@ -165,13 +200,15 @@ class LocalNotificationsService {
       );
     }
 
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin
-        >()
-        ?.requestPermissions(alert: true, badge: true, sound: true);
-
-    _permissionsRequested = true;
+    if (!_notificationPermissionRequested) {
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
+      _notificationPermissionRequested = true;
+    }
+    if (exactAlarms) _exactAlarmPermissionRequested = true;
   }
 
   Future<void> cancelAllReminders() async {
@@ -365,6 +402,70 @@ class LocalNotificationsService {
       );
       rethrow;
     }
+  }
+
+  Future<void> scheduleAttentionNotification(
+    AttentionNotificationPlan plan,
+  ) async {
+    if (kIsWeb) {
+      return;
+    }
+    if (!_initialized) {
+      throw StateError('Local notifications have not been initialized.');
+    }
+    await requestPermissions(exactAlarms: false);
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (android != null &&
+        !(await android.areNotificationsEnabled() ?? false)) {
+      throw StateError('Notifications are disabled for JotCue.');
+    }
+    final payload = jsonEncode({
+      'type': 'attention',
+      'destination': plan.destination.name,
+      'kind': plan.kind.name,
+      'notificationId': plan.id,
+      'title': plan.title,
+      'body': plan.body,
+    });
+    await _plugin.zonedSchedule(
+      id: plan.id,
+      title: plan.title,
+      body: plan.body,
+      scheduledDate: _toTzDateTime(plan.scheduledAt),
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _attentionChannelId,
+          _attentionChannelName,
+          channelDescription: _attentionChannelDescription,
+          icon: 'ic_notification',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+          playSound: true,
+          enableVibration: false,
+          visibility: NotificationVisibility.private,
+          category: AndroidNotificationCategory.status,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: false,
+          presentSound: true,
+        ),
+        windows: WindowsNotificationDetails(),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      matchDateTimeComponents: plan.repeatDaily
+          ? DateTimeComponents.time
+          : null,
+      payload: payload,
+    );
+  }
+
+  Future<void> cancelAttentionNotification(int notificationId) async {
+    if (kIsWeb) return;
+    await _plugin.cancel(id: notificationId);
   }
 
   Future<void> showImmediateTestNotification() async {
@@ -612,6 +713,11 @@ class LocalNotificationsService {
   ) async {
     final payload = _parsePayload(response.payload);
     final notificationId = response.id ?? payload?.notificationId;
+    if (payload?.attentionDestination != null) {
+      _selectedAttentionDestination = payload!.attentionDestination!;
+      _attentionDestinationController.add(payload.attentionDestination!);
+      return;
+    }
 
     switch (response.actionId) {
       case _snoozeActionId:
@@ -659,6 +765,9 @@ class LocalNotificationsService {
         noteId: data['noteId'] as String? ?? '',
         title: data['title'] as String? ?? 'JotCue reminder',
         body: data['body'] as String? ?? '',
+        attentionDestination: data['type'] == 'attention'
+            ? _attentionDestinationFromName(data['destination'] as String?)
+            : null,
       );
     } catch (_) {
       return _NotificationPayload(
@@ -667,6 +776,13 @@ class LocalNotificationsService {
         body: '',
       );
     }
+  }
+
+  AttentionDestination? _attentionDestinationFromName(String? value) {
+    for (final destination in AttentionDestination.values) {
+      if (destination.name == value) return destination;
+    }
+    return null;
   }
 
   void _handlePayload(String? noteId) {
@@ -684,12 +800,14 @@ class _NotificationPayload {
     required this.noteId,
     required this.title,
     required this.body,
+    this.attentionDestination,
   });
 
   final int? notificationId;
   final String noteId;
   final String title;
   final String body;
+  final AttentionDestination? attentionDestination;
 }
 
 class NotificationReadiness {
@@ -725,10 +843,12 @@ class InAppReminderAlert {
     required this.noteId,
     required this.title,
     required this.body,
+    this.attentionDestination,
   });
 
   final int notificationId;
   final String noteId;
   final String title;
   final String body;
+  final AttentionDestination? attentionDestination;
 }

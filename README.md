@@ -90,3 +90,6 @@ are separate hardening milestones.
 
 ### Trusted automation safety (Patch 17)
 Trusted local schedule moves now have device-local pause controls, task/project exclusions, a 30-minute per-block cooldown, visible "Moved by JotCue" provenance, guarded undo, and safe cleanup of older audit activity. Undo only restores a block when the current block still matches the trusted move, the original slot is still in the future and conflict-free, and no external calendar link exists. These controls do not broaden Trusted permissions or add background automation.
+
+### Proactive Attention Engine (Patch 18)
+JotCue can schedule device-local Morning Pulse and Daily Closing cues, resurface imminent/overdue tasks, and notify when deterministic replanning detects material schedule issues. Attention delivery respects device-local quiet hours, deduplicates stable planning issues, routes notification taps to Pulse or Plan, and remains separate from reminder alarms.

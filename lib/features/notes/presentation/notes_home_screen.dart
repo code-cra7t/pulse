@@ -14,6 +14,8 @@ import '../../../core/widgets/adaptive_shell.dart';
 import '../../../core/widgets/pulse_components.dart';
 import '../../../core/services/firebase_providers.dart';
 import '../../capture/presentation/natural_language_capture_sheet.dart';
+import '../../attention/models/attention_plan.dart';
+import '../../attention/providers/attention_providers.dart';
 import '../../external_context/models/shared_capture_payload.dart';
 import '../../external_context/providers/external_context_providers.dart';
 import '../../profile/presentation/profile_screen.dart';
@@ -50,6 +52,7 @@ class NotesHomeScreen extends ConsumerStatefulWidget {
 
 class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
   StreamSubscription<String?>? _notificationSelectionSubscription;
+  StreamSubscription<AttentionDestination>? _attentionDestinationSubscription;
   StreamSubscription<SharedCapturePayload>? _sharedCaptureSubscription;
   final Queue<SharedCapturePayload> _pendingSharedCaptures =
       Queue<SharedCapturePayload>();
@@ -79,6 +82,22 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
           });
         });
 
+    _attentionDestinationSubscription = notifications.attentionDestinations
+        .listen((destination) {
+          if (!mounted) return;
+          setState(() {
+            _navIndex = destination == AttentionDestination.pulse ? 1 : 2;
+            _creatingDesktopNote = false;
+          });
+        });
+    final pendingAttentionDestination =
+        notifications.selectedAttentionDestination;
+    if (pendingAttentionDestination != null) {
+      _navIndex = pendingAttentionDestination == AttentionDestination.pulse
+          ? 1
+          : 2;
+    }
+
     final shareService = ref.read(deviceShareServiceProvider);
     _sharedCaptureSubscription = shareService.sharedContent.listen((payload) {
       if (!mounted) {
@@ -93,6 +112,7 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
   @override
   void dispose() {
     _notificationSelectionSubscription?.cancel();
+    _attentionDestinationSubscription?.cancel();
     _sharedCaptureSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -100,6 +120,7 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(attentionCoordinatorProvider);
     final notesAsync = ref.watch(notesStreamProvider);
     final allNotes = notesAsync.asData?.value ?? const <Note>[];
     final filteredNotes = ref.watch(filteredNotesProvider);
