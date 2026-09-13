@@ -21,7 +21,8 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'userId', 'title', 'isPinned', 'createdAt', 'updatedAt',
-          'tags', 'content', 'color', 'images', 'imageUrls', 'taskIdentities'
+          'tags', 'content', 'color', 'images', 'imageUrls', 'taskIdentities',
+          'taskMetadataSchemaVersion', 'taskMetadataWriteToken'
         ])
         && data.userId == request.auth.uid
         && (data.title is string || data.title == null)
@@ -33,7 +34,47 @@ service cloud.firestore {
         && data.color is int
         && data.images is list
         && (!data.keys().hasAny(['imageUrls']) || data.imageUrls is list)
-        && (!data.keys().hasAny(['taskIdentities']) || data.taskIdentities is list);
+        && (!data.keys().hasAny(['taskIdentities']) || data.taskIdentities is list)
+        && validTaskMetadataGuard(data);
+    }
+
+
+    function validTaskMetadataGuard(data) {
+      let hasSchema = data.keys().hasAny(['taskMetadataSchemaVersion']);
+      let hasToken = data.keys().hasAny(['taskMetadataWriteToken']);
+      return (!hasSchema && !hasToken)
+        || (hasSchema
+          && hasToken
+          && data.taskMetadataSchemaVersion is int
+          && data.taskMetadataSchemaVersion >= 1
+          && data.taskMetadataWriteToken is string
+          && data.taskMetadataWriteToken.size() > 0
+          && data.taskMetadataWriteToken.size() <= 128);
+    }
+
+    function validTaskMetadataCompatibilityUpdate(oldData, newData) {
+      let oldProtected = oldData.keys().hasAll([
+        'taskMetadataSchemaVersion', 'taskMetadataWriteToken'
+      ]);
+      let newProtected = newData.keys().hasAll([
+        'taskMetadataSchemaVersion', 'taskMetadataWriteToken'
+      ]);
+      let affected = newData.diff(oldData).affectedKeys();
+      let identitiesChanged = affected.hasAny(['taskIdentities']);
+      let contentChanged = affected.hasAny(['content']);
+      let oldTaskIdentities = oldData.get('taskIdentities', []);
+      let newTaskIdentities = newData.get('taskIdentities', []);
+      let taskBearing = (oldTaskIdentities is list && oldTaskIdentities.size() > 0)
+        || (newTaskIdentities is list && newTaskIdentities.size() > 0);
+      let sensitiveTaskWrite = identitiesChanged || (contentChanged && taskBearing);
+      let preservesProtection = !oldProtected
+        || (newProtected
+          && newData.taskMetadataSchemaVersion >= oldData.taskMetadataSchemaVersion);
+      let provesModernTaskWrite = !sensitiveTaskWrite
+        || (newProtected
+          && newData.taskMetadataSchemaVersion >= 1
+          && newData.taskMetadataWriteToken != oldData.get('taskMetadataWriteToken', ''));
+      return preservesProtection && provesModernTaskWrite;
     }
 
     function validProject(data) {
@@ -211,6 +252,10 @@ service cloud.firestore {
       allow create: if signedIn() && validNote(request.resource.data);
       allow update: if owns(resource.data)
         && validNote(request.resource.data)
+        && validTaskMetadataCompatibilityUpdate(
+          resource.data,
+          request.resource.data
+        )
         && request.resource.data.userId == resource.data.userId;
     }
 

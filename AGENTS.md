@@ -142,3 +142,12 @@ Trusted automation rules:
 - Cross-device schedule sync never grants permission to modify a local iOS calendar copy. Calendar writes remain explicit local actions.
 - Keep iOS reminder notification actions on the existing Flutter notification response path; notification actions may snooze/dismiss/navigate but must not broaden automation authority.
 - Changes to the Share Extension require an iOS simulator build in addition to the normal analyzer/test/Android verification gate. Device distribution also requires the App Group capability to be provisioned for both Runner and ShareExtension.
+
+## Patch 25 release-hardening and metadata-compatibility guardrails
+- Visible Note text/completion remain authoritative; compatibility protection must not rewrite visible Note content merely to preserve hidden metadata.
+- Modern Notes protect hidden Task identity writes with `taskMetadataSchemaVersion` plus a fresh `taskMetadataWriteToken`. Any write that changes `taskIdentities` must prove it came from a compatible client.
+- Legacy Notes without the guard remain readable/creatable, and harmless legacy title/pin/tag/color edits may continue. Content edits on Task-bearing Notes and any `taskIdentities` change require a fresh modern token. Prefer rejecting a risky legacy write over accepting silent metadata corruption or visible/hidden Task drift.
+- Modern clients must retain unknown fields inside each Task identity so future metadata survives read/edit/reconcile/write cycles.
+- A queued legacy Note mutation must be reconciled against the latest modern remote identities before it is upgraded to the current schema/token; never stamp a lossy legacy payload as modern without preservation.
+- Firestore rule deployment is a separately authorized release action. Verification may run emulator suites only.
+- Release readiness requires old-version/new-version compatibility testing plus Android and iOS physical-device smoke checks; simulator/unit tests alone are insufficient for native calendar/share/notification provisioning behavior.

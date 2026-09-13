@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/offline/offline_note_store.dart';
 import '../../../core/offline/pending_note_mutation.dart';
 import '../../tasks/data/task_identity_reconciler.dart';
+import '../../tasks/data/task_metadata_compatibility.dart';
 import '../models/note.dart';
 import '../utils/tag_parser.dart';
 import '../utils/task_parser.dart';
@@ -70,6 +71,8 @@ class NotesService {
         previousIdentities: const [],
         createId: _newTaskId,
       ),
+      taskMetadataSchemaVersion: currentTaskMetadataSchemaVersion,
+      taskMetadataWriteToken: _newTaskMetadataWriteToken(),
     );
     final mutation = _upsertMutation(note);
 
@@ -92,6 +95,8 @@ class NotesService {
         previousIdentities: previousIdentities,
         createId: _newTaskId,
       ),
+      taskMetadataSchemaVersion: _schemaForWrite(note, storedNote),
+      taskMetadataWriteToken: _newTaskMetadataWriteToken(),
       updatedAt: DateTime.now(),
     );
     final mutation = _upsertMutation(updatedNote);
@@ -256,10 +261,12 @@ class NotesService {
         if (payload == null) {
           throw StateError('An upsert mutation requires a note payload.');
         }
-        await reference.set(
-          Note.fromLocalMap(payload).toMap(),
-          SetOptions(merge: true),
+        final pendingNote = Note.fromLocalMap(payload);
+        final outboundNote = await _prepareForRemoteUpsert(
+          reference,
+          pendingNote,
         );
+        await reference.set(outboundNote.toMap(), SetOptions(merge: true));
       }
       await _offlineStore.removeMutation(mutation.id);
       return true;
@@ -270,6 +277,31 @@ class NotesService {
       );
       return false;
     }
+  }
+
+  Future<Note> _prepareForRemoteUpsert(
+    DocumentReference<Map<String, dynamic>> reference,
+    Note pendingNote,
+  ) async {
+    if (pendingNote.usesModernTaskMetadata) {
+      return pendingNote;
+    }
+
+    final remoteSnapshot = await reference.get(
+      const GetOptions(source: Source.server),
+    );
+    final remoteNote = remoteSnapshot.exists
+        ? Note.fromFirestore(remoteSnapshot)
+        : null;
+    final hardened = TaskMetadataCompatibility.hardenLegacyMutation(
+      pendingNote: pendingNote,
+      remoteNote: remoteNote,
+      createTaskId: _newTaskId,
+      writeToken: _newTaskMetadataWriteToken(),
+    );
+    return hardened.copyWith(
+      tags: _mergedTags(hardened.tags, hardened.content),
+    );
   }
 
   PendingNoteMutation _upsertMutation(Note note) {
@@ -283,7 +315,20 @@ class NotesService {
     );
   }
 
+  int _schemaForWrite(Note note, Note? storedNote) {
+    var schema = currentTaskMetadataSchemaVersion;
+    if (note.taskMetadataSchemaVersion > schema) {
+      schema = note.taskMetadataSchemaVersion;
+    }
+    final storedSchema = storedNote?.taskMetadataSchemaVersion ?? 0;
+    if (storedSchema > schema) schema = storedSchema;
+    return schema;
+  }
+
   String _newTaskId() => _firestore.collection('tasks').doc().id;
+
+  String _newTaskMetadataWriteToken() =>
+      _firestore.collection('noteMetadataWrites').doc().id;
 
   String _mutationId(String noteId) {
     return '${DateTime.now().microsecondsSinceEpoch}-$noteId';

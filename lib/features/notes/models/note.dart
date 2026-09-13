@@ -4,6 +4,13 @@ import '../../tasks/models/note_task_identity.dart';
 
 const _unsetTitle = Object();
 
+/// Current hidden Task metadata schema written by this client.
+///
+/// Legacy Notes may omit these fields and remain readable. Firestore rules use
+/// the per-write token to prevent an older client from replacing modern
+/// `taskIdentities` with a lossy legacy shape.
+const int currentTaskMetadataSchemaVersion = 1;
+
 class Note {
   const Note({
     required this.id,
@@ -17,6 +24,8 @@ class Note {
     required this.color,
     required this.images,
     this.taskIdentities = const <NoteTaskIdentity>[],
+    this.taskMetadataSchemaVersion = 0,
+    this.taskMetadataWriteToken,
   });
 
   final String id;
@@ -30,6 +39,12 @@ class Note {
   final int color;
   final List<String> images;
   final List<NoteTaskIdentity> taskIdentities;
+  final int taskMetadataSchemaVersion;
+  final String? taskMetadataWriteToken;
+
+  bool get usesModernTaskMetadata =>
+      taskMetadataSchemaVersion >= currentTaskMetadataSchemaVersion &&
+      (taskMetadataWriteToken?.trim().isNotEmpty ?? false);
 
   factory Note.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? <String, dynamic>{};
@@ -54,6 +69,12 @@ class Note {
       color: data['color'] as int? ?? 0xFFFFF8E1,
       images: _readImageUrls(data),
       taskIdentities: _readTaskIdentities(data),
+      taskMetadataSchemaVersion: _readNonNegativeInt(
+        data['taskMetadataSchemaVersion'],
+      ),
+      taskMetadataWriteToken: _readNormalizedToken(
+        data['taskMetadataWriteToken'],
+      ),
     );
   }
 
@@ -76,6 +97,12 @@ class Note {
       color: data['color'] as int? ?? 0xFFFFF8E1,
       images: _readImageUrls(data),
       taskIdentities: _readTaskIdentities(data),
+      taskMetadataSchemaVersion: _readNonNegativeInt(
+        data['taskMetadataSchemaVersion'],
+      ),
+      taskMetadataWriteToken: _readNormalizedToken(
+        data['taskMetadataWriteToken'],
+      ),
     );
   }
 
@@ -91,6 +118,10 @@ class Note {
       'color': color,
       'images': images,
       'taskIdentities': taskIdentities.map((item) => item.toMap()).toList(),
+      if (taskMetadataSchemaVersion > 0 || taskMetadataWriteToken != null) ...{
+        'taskMetadataSchemaVersion': taskMetadataSchemaVersion,
+        'taskMetadataWriteToken': taskMetadataWriteToken,
+      },
     };
   }
 
@@ -107,6 +138,8 @@ class Note {
       'color': color,
       'images': images,
       'taskIdentities': taskIdentities.map((item) => item.toMap()).toList(),
+      'taskMetadataSchemaVersion': taskMetadataSchemaVersion,
+      'taskMetadataWriteToken': taskMetadataWriteToken,
     };
   }
 
@@ -122,6 +155,8 @@ class Note {
     int? color,
     List<String>? images,
     List<NoteTaskIdentity>? taskIdentities,
+    int? taskMetadataSchemaVersion,
+    Object? taskMetadataWriteToken = _unsetTaskMetadataWriteToken,
   }) {
     return Note(
       id: id ?? this.id,
@@ -135,6 +170,12 @@ class Note {
       color: color ?? this.color,
       images: images ?? this.images,
       taskIdentities: taskIdentities ?? this.taskIdentities,
+      taskMetadataSchemaVersion:
+          taskMetadataSchemaVersion ?? this.taskMetadataSchemaVersion,
+      taskMetadataWriteToken:
+          identical(taskMetadataWriteToken, _unsetTaskMetadataWriteToken)
+          ? this.taskMetadataWriteToken
+          : taskMetadataWriteToken as String?,
     );
   }
 }
@@ -167,3 +208,15 @@ List<NoteTaskIdentity> _readTaskIdentities(Map<String, dynamic> data) {
       .where((identity) => identity.id.isNotEmpty && identity.lineIndex >= 0)
       .toList(growable: false);
 }
+
+int _readNonNegativeInt(Object? value) {
+  if (value is int && value >= 0) return value;
+  return 0;
+}
+
+String? _readNormalizedToken(Object? value) {
+  final token = value?.toString().trim() ?? '';
+  return token.isEmpty ? null : token;
+}
+
+const _unsetTaskMetadataWriteToken = Object();

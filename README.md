@@ -16,7 +16,7 @@ planning signals.
 - Read-only Android/iOS calendar availability and deterministic scheduling proposals
 - Derived on-device Personal Graph across Notes, Tasks, Projects, deadlines, and accepted schedule blocks
 - User-defined planning windows, breaks, daily focus limits, and protected lunch
-- User-approved JotCue schedule blocks stored locally on the device
+- User-approved JotCue schedule blocks synced across the signed-in account with an offline local cache
 - Trusted foreground-only local schedule moves in Plan, gated by assistant permissions and recorded in a device-local audit trail
 - Smart reminder phrase parsing
 - Local notifications, managed Android/iOS calendar links, and review-first text sharing
@@ -66,6 +66,8 @@ server credentials, signing keys, `.env` files, or Terraform variable files.
 dart format --output=none --set-exit-if-changed lib test
 flutter analyze
 flutter test
+firebase emulators:exec --only firestore --project demo-jotcue \
+  "node test/firestore_note_compatibility_rules_test.cjs"
 flutter build web --release
 ```
 
@@ -115,3 +117,6 @@ Accepted JotCue schedule blocks now synchronize across signed-in devices while r
 
 ### iOS native parity (Patch 24)
 JotCue now uses the same bounded calendar-read, managed reminder-calendar, managed schedule-calendar, Share-to-JotCue, and notification-action contracts on iOS as on Android. EventKit access stays device-local; external calendar contents are used only as busy-time inputs and are never uploaded by this path. Calendar writes remain explicit and ownership-scoped. The iOS Share Extension queues only user-selected text/links through an App Group for the existing review-first Quick Capture flow; receiving a share never creates application data by itself.
+
+### Release hardening and metadata compatibility (Patch 25)
+Modern Notes protect hidden Task identity metadata with a schema version and per-write token. Firestore continues to accept legacy Note documents and harmless non-content edits, but a write that changes `taskIdentities`—or Task-bearing Note content—must prove it came from a compatible client with a fresh token. This prevents older builds from silently stripping newer project, deadline, effort, dependency, or future Task metadata. Patch 25 also preserves unknown fields inside Task identities so later schema additions survive edits by an older modern client. Legacy offline mutations are reconciled against current remote identities before upload rather than being blindly upgraded. See `docs/RELEASE_READINESS.md` for the Firebase rollout order, old/new migration matrix, and Android/iOS physical-device smoke gate.

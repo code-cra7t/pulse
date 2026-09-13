@@ -12,6 +12,7 @@ class NoteTaskIdentity {
     this.isFlexible = true,
     this.dependsOnTaskIds = const <String>[],
     this.waitingFor,
+    this.extraFields = const <String, dynamic>{},
   });
 
   final String id;
@@ -25,6 +26,10 @@ class NoteTaskIdentity {
   final List<String> dependsOnTaskIds;
   final String? waitingFor;
 
+  /// Unknown identity fields are retained so an older modern client does not
+  /// erase metadata introduced by a newer schema when it edits the same Task.
+  final Map<String, dynamic> extraFields;
+
   String get normalizedText => normalizeTaskIdentityText(text);
 
   bool matchesText(String value) {
@@ -32,6 +37,12 @@ class NoteTaskIdentity {
   }
 
   factory NoteTaskIdentity.fromMap(Map<String, dynamic> data) {
+    final extras = <String, dynamic>{};
+    for (final entry in data.entries) {
+      if (!_knownFields.contains(entry.key)) {
+        extras[entry.key] = entry.value;
+      }
+    }
     return NoteTaskIdentity(
       id: data['id'] as String? ?? '',
       lineIndex: data['lineIndex'] as int? ?? -1,
@@ -43,11 +54,13 @@ class NoteTaskIdentity {
       isFlexible: data['isFlexible'] as bool? ?? true,
       dependsOnTaskIds: _stringList(data['dependsOnTaskIds']),
       waitingFor: _normalizedNullableString(data['waitingFor']),
+      extraFields: Map<String, dynamic>.unmodifiable(extras),
     );
   }
 
   Map<String, dynamic> toMap() {
-    return {
+    return <String, dynamic>{
+      ...extraFields,
       'id': id,
       'lineIndex': lineIndex,
       'text': text,
@@ -72,6 +85,7 @@ class NoteTaskIdentity {
     bool? isFlexible,
     List<String>? dependsOnTaskIds,
     Object? waitingFor = _unchanged,
+    Map<String, dynamic>? extraFields,
   }) {
     return NoteTaskIdentity(
       id: id ?? this.id,
@@ -90,6 +104,7 @@ class NoteTaskIdentity {
       waitingFor: identical(waitingFor, _unchanged)
           ? this.waitingFor
           : waitingFor as String?,
+      extraFields: extraFields ?? this.extraFields,
     );
   }
 }
@@ -119,3 +134,16 @@ DateTime? _dateFromMilliseconds(Object? value) {
 }
 
 const _unchanged = Object();
+
+const Set<String> _knownFields = <String>{
+  'id',
+  'lineIndex',
+  'text',
+  'projectId',
+  'dueAtMs',
+  'priority',
+  'estimatedMinutes',
+  'isFlexible',
+  'dependsOnTaskIds',
+  'waitingFor',
+};
