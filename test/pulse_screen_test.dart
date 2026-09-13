@@ -196,6 +196,10 @@ void main() {
     expect(find.text('Good morning, Tori'), findsOneWidget);
     expect(find.text('Morning Pulse'), findsOneWidget);
     expect(find.textContaining('A long task title'), findsOneWidget);
+    expect(find.byKey(const ValueKey('pulse-ask-jotcue')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('pulse-ask-jotcue')));
+    await tester.pumpAndSettle();
+    expect(find.text('Ask JotCue'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

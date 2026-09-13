@@ -14,6 +14,7 @@ Current product surfaces:
 - Reminders (manual + smart)
 - Plan (projects + task planning metadata)
 - Pulse (deterministic daily focus and attention cues)
+- Ask JotCue (deterministic read-only assistant over the current plan)
 - Suggested scheduling (explicit availability + local calendar busy time + user-approved device-local blocks)
 - Adaptive replanning (reviewable drift/conflict/deadline-capacity suggestions)
 - Settings / profile
@@ -26,6 +27,8 @@ Rules:
 - Visible note content remains the source of truth for note-backed task text and completion.
 - Planning metadata must not rewrite visible note text.
 - Prefer deterministic planning logic before introducing AI-generated decisions.
+- Ask JotCue v1 is read-only, on-device, and ephemeral: no LLM/network calls, persisted chat history, or mutations from conversation.
+- Do not introduce a fixed bot-face avatar for Ask JotCue; use JotCue brand language until a later personalized assistant-identity system is explicitly designed.
 - Preserve offline-first behavior.
 - Do not deploy Firebase rules unless explicitly instructed.
 

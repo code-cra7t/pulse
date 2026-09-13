@@ -5,6 +5,8 @@ import '../../../core/models/priority_level.dart';
 import '../../../core/services/app_theme.dart';
 import '../../../core/widgets/adaptive_shell.dart';
 import '../../../core/widgets/pulse_components.dart';
+import '../../assistant/models/ask_jotcue.dart';
+import '../../assistant/presentation/ask_jotcue_sheet.dart';
 import '../../capture/presentation/natural_language_capture_sheet.dart';
 import '../../planning/presentation/widgets/task_planning_sheet.dart';
 import '../../planning/providers/planning_providers.dart';
@@ -92,6 +94,21 @@ class PulseScreen extends ConsumerWidget {
                   _PulseHeader(
                     now: currentTime,
                     displayName: displayName,
+                    onAsk: () => showAskJotCueSheet(
+                      context: context,
+                      assistantContext: AskJotCueContext(
+                        now: currentTime,
+                        pulse: overview,
+                        dailyLoop: dailyLoop,
+                        tasks: tasks,
+                        projects: projects,
+                        blocks:
+                            scheduleBlocksAsync.asData?.value ??
+                            const <ScheduleBlock>[],
+                        scheduling: scheduleAsync.asData?.value,
+                        replanning: replanningAsync.asData?.value,
+                      ),
+                    ),
                     onCapture: () =>
                         showNaturalLanguageCaptureSheet(context: context),
                     onOpenPlan: onOpenPlan,
@@ -280,12 +297,14 @@ class _PulseHeader extends StatelessWidget {
   const _PulseHeader({
     required this.now,
     required this.displayName,
+    required this.onAsk,
     required this.onCapture,
     required this.onOpenPlan,
   });
 
   final DateTime now;
   final String? displayName;
+  final VoidCallback onAsk;
   final VoidCallback onCapture;
   final VoidCallback? onOpenPlan;
 
@@ -314,6 +333,13 @@ class _PulseHeader extends StatelessWidget {
               ),
             ],
           ),
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        IconButton.filledTonal(
+          key: const ValueKey('pulse-ask-jotcue'),
+          onPressed: onAsk,
+          tooltip: 'Ask JotCue',
+          icon: const Icon(Icons.auto_awesome_rounded),
         ),
         const SizedBox(width: AppSpacing.xs),
         IconButton.filledTonal(

@@ -12,6 +12,7 @@ planning signals.
 - Offline-first projects and task planning metadata
 - Plan workspace for projects, deadlines, priorities, effort, and flexibility
 - Pulse workspace for deterministic daily focus and attention cues
+- Ask JotCue: an on-device, read-only conversational view of current planning state
 - Read-only Android calendar availability and deterministic scheduling proposals
 - User-defined planning windows, breaks, daily focus limits, and protected lunch
 - User-approved JotCue schedule blocks stored locally on the device
@@ -43,7 +44,8 @@ queued and replayed when connectivity returns. Note-backed task text remains
 in the note while planning metadata is stored against stable task identities.
 Scheduling preferences sync through the existing user settings document, while
 external calendar events stay local/in-memory and accepted JotCue schedule
-blocks currently remain device-local.
+blocks currently remain device-local. Ask JotCue currently derives answers on device
+from this structured state; conversations are ephemeral and no LLM/network call is made.
 
 ## Local setup
 
