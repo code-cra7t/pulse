@@ -5,6 +5,9 @@ import '../../../core/services/app_theme.dart';
 import '../../../core/services/firebase_providers.dart';
 import '../../../core/widgets/jotcue_brand.dart';
 import '../../../core/widgets/pulse_components.dart';
+import '../../assistant/models/ai_assistant_preferences.dart';
+import '../../assistant/presentation/ai_assistant_preferences_sheet.dart';
+import '../../assistant/providers/assistant_providers.dart';
 import '../../automation/models/automation_preferences.dart';
 import '../../automation/models/automation_safety_preferences.dart';
 import '../../automation/presentation/automation_preferences_sheet.dart';
@@ -44,6 +47,10 @@ class SettingsScreen extends ConsumerWidget {
     final automationSafety =
         ref.watch(automationSafetyPreferencesProvider).asData?.value ??
         const AutomationSafetyPreferences();
+    final aiAssistantPreferences =
+        ref.watch(aiAssistantPreferencesProvider).asData?.value ??
+        const AiAssistantPreferences();
+    final aiGatewayConfigured = ref.watch(aiGatewayClientProvider).isConfigured;
     final attentionPreferences =
         ref.watch(attentionPreferencesProvider).asData?.value ??
         const AttentionPreferences();
@@ -291,6 +298,25 @@ class SettingsScreen extends ConsumerWidget {
                       ),
                       const Divider(height: 1),
                       ListTile(
+                        key: const ValueKey('ai-assistance-setting'),
+                        leading: const Icon(Icons.psychology_alt_outlined),
+                        title: const Text('AI assistance'),
+                        subtitle: Text(
+                          _aiAssistantLabel(
+                            aiAssistantPreferences,
+                            aiGatewayConfigured,
+                          ),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => _editAiAssistantPreferences(
+                          context,
+                          ref,
+                          aiAssistantPreferences,
+                          aiGatewayConfigured,
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
                         key: const ValueKey(
                           'trusted-automation-safety-setting',
                         ),
@@ -459,6 +485,26 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _editAiAssistantPreferences(
+    BuildContext context,
+    WidgetRef ref,
+    AiAssistantPreferences initial,
+    bool gatewayConfigured,
+  ) async {
+    final updated = await showAiAssistantPreferencesSheet(
+      context: context,
+      initial: initial,
+      gatewayConfigured: gatewayConfigured,
+    );
+    if (updated == null || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(offlineAiAssistantStoreProvider).writePreferences(updated);
+    } catch (error) {
+      _showError(messenger, error);
+    }
+  }
+
   Future<void> _editAutomationSafety(
     BuildContext context,
     WidgetRef ref,
@@ -493,6 +539,16 @@ class SettingsScreen extends ConsumerWidget {
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text('Settings save failed: $error')));
   }
+}
+
+String _aiAssistantLabel(
+  AiAssistantPreferences preferences,
+  bool gatewayConfigured,
+) {
+  if (!preferences.usesRemoteGateway) return 'Local only';
+  return gatewayConfigured
+      ? 'Hybrid · local first, remote fallback'
+      : 'Hybrid selected · gateway not configured';
 }
 
 String _automationLevelLabel(AutomationLevel level) => switch (level) {
@@ -596,7 +652,7 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'This permanently deletes your notes, tasks, reminders, local planning blocks, local automation history and safety controls, uploaded images, settings, and JotCue account. This cannot be undone.',
+                'This permanently deletes your notes, tasks, reminders, local planning blocks, local automation history and safety controls, device-local AI assistance preference, uploaded images, settings, and JotCue account. This cannot be undone.',
               ),
               const SizedBox(height: AppSpacing.md),
               TextFormField(

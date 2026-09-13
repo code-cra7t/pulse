@@ -7,25 +7,39 @@ import '../../automation/providers/automation_providers.dart';
 import '../../pulse/models/daily_pulse_loop.dart';
 import '../../pulse/models/pulse_overview.dart';
 import '../../tasks/data/task_dependency_analyzer.dart';
+import '../models/ai_assistant_preferences.dart';
 import '../models/ask_jotcue.dart';
 import '../providers/assistant_providers.dart';
 
 Future<void> showAskJotCueSheet({
   required BuildContext context,
   required AskJotCueContext assistantContext,
+  AiAssistantPreferences aiPreferences = const AiAssistantPreferences(),
+  bool gatewayConfigured = false,
 }) async {
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (context) => AskJotCueSheet(assistantContext: assistantContext),
+    builder: (context) => AskJotCueSheet(
+      assistantContext: assistantContext,
+      aiPreferences: aiPreferences,
+      gatewayConfigured: gatewayConfigured,
+    ),
   );
 }
 
 class AskJotCueSheet extends ConsumerStatefulWidget {
-  const AskJotCueSheet({super.key, required this.assistantContext});
+  const AskJotCueSheet({
+    super.key,
+    required this.assistantContext,
+    this.aiPreferences = const AiAssistantPreferences(),
+    this.gatewayConfigured = false,
+  });
 
   final AskJotCueContext assistantContext;
+  final AiAssistantPreferences aiPreferences;
+  final bool gatewayConfigured;
 
   @override
   ConsumerState<AskJotCueSheet> createState() => _AskJotCueSheetState();
@@ -37,10 +51,11 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
   late AskJotCueContext _assistantContext;
   final Set<String> _runningActionIds = <String>{};
   final Set<String> _completedActionIds = <String>{};
+  bool _isAnswering = false;
   final List<AskJotCueMessage> _messages = [
     const AskJotCueMessage(
       text:
-          'Ask me about your current plan. I can explain focus, deadlines, free time, scheduled work, projects, and planning issues. I can also preview a few explicit changes, but nothing is applied until permissions allow it and you confirm.',
+          'Ask me about your current plan. Local reasoning runs first. If you explicitly enable Hybrid assistance, only unsupported questions may use the configured AI gateway, and any proposed change still requires the same local safety checks and confirmation.',
       isUser: false,
     ),
   ];
@@ -67,6 +82,8 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
     final height = (size.height * 0.86).clamp(460.0, 780.0).toDouble();
     final preferences = ref.watch(automationPreferencesProvider);
     final policy = ref.watch(automationPolicyProvider);
+    final aiPreferences = widget.aiPreferences;
+    final gatewayConfigured = widget.gatewayConfigured;
 
     return SizedBox(
       height: height,
@@ -102,7 +119,9 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
                       Text(
-                        'Planning assistant · on device',
+                        aiPreferences.usesRemoteGateway && gatewayConfigured
+                            ? 'Planning assistant · local first + hybrid'
+                            : 'Planning assistant · on device',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -118,7 +137,7 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
               ],
             ),
             const SizedBox(height: AppSpacing.md),
-            _QuickQuestions(onAsk: _submitText),
+            _QuickQuestions(onAsk: (value) => _submitText(value)),
             const SizedBox(height: AppSpacing.sm),
             Expanded(
               child: ListView.separated(
@@ -174,15 +193,25 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
                 const SizedBox(width: AppSpacing.xs),
                 IconButton.filled(
                   key: const ValueKey('ask-jotcue-send'),
-                  onPressed: _submit,
+                  onPressed: _isAnswering ? null : _submit,
                   tooltip: 'Ask JotCue',
-                  icon: const Icon(Icons.arrow_upward_rounded),
+                  icon: _isAnswering
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.arrow_upward_rounded),
                 ),
               ],
             ),
             const SizedBox(height: 4),
             Text(
-              'Supported changes are previewed first. Calendar writes and unsupported requests are never silently applied.',
+              aiPreferences.usesRemoteGateway && gatewayConfigured
+                  ? 'Hybrid is local-first. Remote answers are ephemeral; proposed changes still use local validation and explicit Apply.'
+                  : aiPreferences.usesRemoteGateway
+                  ? 'Hybrid is selected but no gateway is configured in this build; Ask JotCue remains local-only.'
+                  : 'Supported changes are previewed first. Calendar writes and unsupported requests are never silently applied.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -198,45 +227,72 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
     _submitText(_controller.text);
   }
 
-  void _submitText(String value) {
+  Future<void> _submitText(String value) async {
     final query = value.trim();
-    if (query.isEmpty) return;
+    if (query.isEmpty || _isAnswering) return;
 
-    final answer = ref
-        .read(askJotCueEngineProvider)
-        .answer(query: query, context: _assistantContext);
-    var proposal = answer.actionProposal;
-    var answerText = answer.title == null
-        ? answer.text
-        : '${answer.title}\n${answer.text}';
-
-    if (proposal != null) {
-      final decision = ref
-          .read(automationPolicyProvider)
-          .evaluate(
-            preferences: ref.read(automationPreferencesProvider),
-            action: _policyActionFor(proposal.kind),
-          );
-      if (decision == AutomationDecision.observeOnly) {
-        answerText =
-            'Observe mode\nI understood the requested change, but Observe mode does not prepare assistant actions. Change Assistant permissions in Settings if you want JotCue to suggest or apply changes.';
-        proposal = null;
-      }
-    }
-
+    final aiPreferences = widget.aiPreferences;
     setState(() {
-      _messages
-        ..add(AskJotCueMessage(text: query, isUser: true))
-        ..add(
+      _isAnswering = true;
+      _messages.add(AskJotCueMessage(text: query, isUser: true));
+      _controller.clear();
+    });
+    _scrollToEnd();
+
+    try {
+      final answer = await ref
+          .read(hybridAskJotCueServiceProvider)
+          .answer(
+            query: query,
+            context: _assistantContext,
+            preferences: aiPreferences,
+          );
+      if (!mounted) return;
+      var proposal = answer.actionProposal;
+      var answerText = answer.title == null
+          ? answer.text
+          : '${answer.title}\n${answer.text}';
+
+      if (proposal != null) {
+        final decision = ref
+            .read(automationPolicyProvider)
+            .evaluate(
+              preferences: ref.read(automationPreferencesProvider),
+              action: _policyActionFor(proposal.kind),
+            );
+        if (decision == AutomationDecision.observeOnly) {
+          answerText =
+              'Observe mode\nI understood the requested change, but Observe mode does not prepare assistant actions. Change Assistant permissions in Settings if you want JotCue to suggest or apply changes.';
+          proposal = null;
+        }
+      }
+
+      setState(() {
+        _isAnswering = false;
+        _messages.add(
           AskJotCueMessage(
             text: answerText,
             isUser: false,
             actionProposal: proposal,
+            usedRemoteAi: answer.usedRemoteAi,
           ),
         );
-      _controller.clear();
-    });
-    _scrollToEnd();
+      });
+      _scrollToEnd();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isAnswering = false;
+        _messages.add(
+          const AskJotCueMessage(
+            text:
+                'I could not answer that safely right now. Nothing was changed.',
+            isUser: false,
+          ),
+        );
+      });
+      _scrollToEnd();
+    }
   }
 
   Future<void> _applyAction(AskJotCueActionProposal proposal) async {
@@ -425,6 +481,16 @@ class _MessageBubble extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (message.usedRemoteAi) ...[
+                  Text(
+                    'AI-assisted · ephemeral',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                ],
                 Text(message.text),
                 if (proposal != null) ...[
                   const SizedBox(height: AppSpacing.sm),

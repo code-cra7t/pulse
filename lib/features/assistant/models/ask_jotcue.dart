@@ -112,12 +112,14 @@ class AskJotCueAnswer {
     required this.text,
     this.title,
     this.actionProposal,
+    this.usedRemoteAi = false,
   });
 
   final AskJotCueIntent intent;
   final String? title;
   final String text;
   final AskJotCueActionProposal? actionProposal;
+  final bool usedRemoteAi;
 }
 
 class AskJotCueMessage {
@@ -125,11 +127,13 @@ class AskJotCueMessage {
     required this.text,
     required this.isUser,
     this.actionProposal,
+    this.usedRemoteAi = false,
   });
 
   final String text;
   final bool isUser;
   final AskJotCueActionProposal? actionProposal;
+  final bool usedRemoteAi;
 }
 
 const _unchanged = Object();

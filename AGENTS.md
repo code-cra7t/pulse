@@ -29,7 +29,7 @@ Rules:
 - Visible note content remains the source of truth for note-backed task text and completion.
 - Planning metadata must not rewrite visible note text.
 - Prefer deterministic planning logic before introducing AI-generated decisions.
-- Ask JotCue stays on-device and ephemeral: no LLM/network calls or persisted chat history. Patch 21 may prepare only narrowly typed Task completion, Task priority, and local accepted-block move previews. Typing a request never executes it.
+- Ask JotCue is local-first and ephemeral. Deterministic parsing/answers always run before optional Hybrid AI. Hybrid is device-local opt-in, may contact only the build-configured JotCue AI gateway, and must never persist chat history. Remote output may propose only the existing allow-listed Task completion, Task priority, or local accepted-block move actions; typing a request never executes it.
 - Do not introduce a fixed bot-face avatar for Ask JotCue; use JotCue brand language until a later personalized assistant-identity system is explicitly designed.
 - Preserve offline-first behavior.
 - Do not deploy Firebase rules unless explicitly instructed.
@@ -110,3 +110,14 @@ Trusted automation rules:
 - Calendar-linked schedule blocks must fail closed in Ask JotCue and route the user to Plan; Patch 21 does not add calendar writes from conversation.
 - Ambiguous Task names, multiple future blocks for one Task, stale block state, past target times, occupied target times, or calendar-link verification failures must never be guessed through.
 - Ask JotCue actions are user-initiated and do not broaden foreground Trusted automation, background execution, or the device-local trusted audit contract.
+
+
+## Patch 22 hybrid-AI/tool-calling guardrails
+- Hybrid AI is OFF by default on every device. Local deterministic Ask JotCue remains fully functional without a gateway.
+- Never embed provider API secrets in the Flutter client. The optional gateway URL is build-configured with `JOTCUE_AI_GATEWAY_URL`; production URLs must use HTTPS.
+- Local deterministic reasoning always gets first refusal. Only queries classified as unsupported/unknown may be sent remotely.
+- Remote context must be minimized and structured. Do not send Note bodies, source Note IDs/line indexes, account identity, reminder text, external calendar contents, audit history, notification history, or a raw Personal Graph payload.
+- Remote tool output is untrusted input. Accept only allow-listed tool names/argument shapes, resolve IDs against current local state, rebuild a local `AskJotCueActionProposal`, then pass through the existing automation policy and executor revalidation.
+- Hybrid mode never bypasses explicit Apply in Ask JotCue, even at Trusted permission level.
+- Unknown/malformed tools, oversized responses, unavailable gateways, stale IDs, and invalid endpoints fail closed to a local answer with no mutation.
+- Remote answers/tool suggestions are ephemeral; do not persist chats, prompts, gateway responses, or model traces in this patch.

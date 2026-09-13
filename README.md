@@ -12,7 +12,7 @@ planning signals.
 - Offline-first projects and task planning metadata
 - Plan workspace for projects, deadlines, priorities, effort, and flexibility
 - Pulse workspace for deterministic daily focus and attention cues
-- Ask JotCue: an on-device conversational planning view with preview-first Task completion, Task priority, and local schedule-move actions
+- Ask JotCue: a local-first conversational planning view with optional Hybrid AI fallback and preview-first Task completion, Task priority, and local schedule-move actions
 - Read-only Android calendar availability and deterministic scheduling proposals
 - Derived on-device Personal Graph across Notes, Tasks, Projects, deadlines, and accepted schedule blocks
 - User-defined planning windows, breaks, daily focus limits, and protected lunch
@@ -39,6 +39,7 @@ Flutter + Riverpod
        +-- Cloud Firestore
        +-- Firebase Storage
        +-- Local Notifications
+       +-- Optional HTTPS AI gateway (Hybrid Ask JotCue only)
 ```
 
 Notes and Projects read from the local database. Remote Firestore snapshots
@@ -47,7 +48,7 @@ queued and replayed when connectivity returns. Note-backed task text remains
 in the note while planning metadata is stored against stable task identities.
 Scheduling preferences sync through the existing user settings document, while
 external calendar events stay local/in-memory and accepted JotCue schedule
-blocks currently remain device-local. Trusted automation activity also remains device-local. The Personal Graph is derived in memory from this structured state and is not persisted as a separate dataset. Ask JotCue derives answers and its small set of typed action previews on device from this structured state; conversations are ephemeral and no LLM/network call is made. Sending a request never mutates data by itself; supported changes remain permission-gated and require an explicit Apply tap.
+blocks currently remain device-local. Trusted automation activity also remains device-local. The Personal Graph is derived in memory from this structured state and is not persisted as a separate dataset. Ask JotCue runs deterministic local reasoning first. If Hybrid assistance is explicitly enabled on the device and the build has an HTTPS JotCue AI gateway configured, only unsupported local queries may send the typed request plus a minimized structured planning snapshot to that gateway. Remote answers are ephemeral. Any remote tool suggestion is converted back into the same local typed action preview and must pass the existing permission and executor checks before an explicit Apply tap can mutate anything.
 
 ## Local setup
 
@@ -103,3 +104,7 @@ Tasks can explicitly depend on other stable JotCue Tasks or carry a human-author
 
 ### Ask JotCue Actions (Patch 21)
 Ask JotCue can deterministically interpret three explicit user commands: mark a stable Task complete/incomplete, change a Task priority, or move one future accepted JotCue schedule block to a specific future time. The assistant always shows a structured preview first. Observe exposes no executable action, Suggest remains preview-only, and Approval/Trusted require the user to tap Apply. Completion still rewrites only the source Note's task completion marker, priority remains hidden Task metadata, and schedule moves are revalidated against the current local block state. Calendar-linked blocks are refused in chat and must be handled from Plan so external calendar changes stay separately approved.
+
+
+### Hybrid AI / tool-calling foundation (Patch 22)
+Ask JotCue can optionally use a build-configured HTTPS gateway after deterministic local reasoning declines a query. Hybrid mode is off by default per device. The gateway receives a bounded structured planning snapshot rather than raw Notes or calendar events, and it can only return prose or one of the allow-listed Task completion, Task priority, or local schedule-move tool suggestions. Tool output never executes directly: JotCue resolves current local IDs, rebuilds a local action preview, applies the existing automation policy, and keeps the explicit Apply step. No provider secret is stored in the Flutter client and no chat history is persisted.

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/firebase_providers.dart';
+import '../../assistant/providers/assistant_providers.dart';
 import '../../automation/providers/trusted_automation_providers.dart';
 import '../../attention/providers/attention_providers.dart';
 import '../../notes/providers/notes_providers.dart';
@@ -21,5 +22,6 @@ final accountDeletionServiceProvider = Provider<AccountDeletionService>((ref) {
     ref.watch(offlineAutomationAuditStoreProvider),
     ref.watch(offlineAutomationSafetyStoreProvider),
     ref.watch(offlineAttentionStoreProvider),
+    ref.watch(offlineAiAssistantStoreProvider),
   );
 });
