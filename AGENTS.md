@@ -31,3 +31,10 @@ Always:
 - Explain the intended change before coding.
 - Only modify necessary files.
 - Run formatter, analyzer, Flutter tests, relevant Firebase rule tests, and a debug Android build before declaring a patch verified.
+
+Calendar / availability rules:
+- External calendar reads are opt-in and local-only by default; do not upload or persist third-party event contents unless a later task explicitly introduces a privacy-reviewed sync design.
+- Treat external calendar events as fixed busy-time inputs, not JotCue-owned events.
+- Keep calendar reading separate from existing reminder calendar export/linking behavior.
+- Availability calculation must stay deterministic and accept explicit planning windows; do not assume a user's waking or working hours.
+- Device calendar reads must stay bounded to near-term ranges (currently at most 31 days).
