@@ -12,12 +12,15 @@ class MainActivity : FlutterActivity() {
     private var calendarReadBridge: CalendarReadBridge? = null
     private var scheduleCalendarBridge: ScheduleCalendarBridge? = null
     private var intervalBridge: IntervalNotificationBridge? = null
+    private var shareIntentBridge: ShareIntentBridge? = null
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         calendarBridge = CalendarBridge(this, flutterEngine.dartExecutor.binaryMessenger)
         calendarReadBridge = CalendarReadBridge(this, flutterEngine.dartExecutor.binaryMessenger)
         scheduleCalendarBridge = ScheduleCalendarBridge(this, flutterEngine.dartExecutor.binaryMessenger)
         intervalBridge = IntervalNotificationBridge(this, flutterEngine.dartExecutor.binaryMessenger)
+        shareIntentBridge = ShareIntentBridge(flutterEngine.dartExecutor.binaryMessenger)
+        consumeShareIntent(intent)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -54,6 +57,19 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeShareIntent(intent)
+    }
+
+    private fun consumeShareIntent(intent: Intent?) {
+        if (shareIntentBridge?.handleIntent(intent) == true) {
+            // Prevent the same cold-start share from being replayed after Activity recreation.
+            setIntent(Intent(this, MainActivity::class.java).apply { action = Intent.ACTION_MAIN })
+        }
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         calendarBridge?.onRequestPermissionsResult(requestCode, grantResults)
@@ -66,6 +82,7 @@ class MainActivity : FlutterActivity() {
         calendarReadBridge?.dispose()
         scheduleCalendarBridge?.dispose()
         intervalBridge?.dispose()
+        shareIntentBridge?.dispose()
         super.onDestroy()
     }
 }

@@ -15,6 +15,7 @@ Current product surfaces:
 - Plan (projects + task planning metadata)
 - Pulse (deterministic daily focus and attention cues)
 - Ask JotCue (deterministic read-only assistant over the current plan)
+- External text sharing into the review-first Quick Capture flow (Android)
 - Suggested scheduling (explicit availability + local calendar busy time + user-approved device-local blocks)
 - Adaptive replanning (reviewable drift/conflict/deadline-capacity suggestions)
 - Settings / profile
@@ -50,3 +51,10 @@ Calendar / availability rules:
 - Adaptive replanning is advisory: never silently mark a block completed/missed, move a block, or displace work. Every mutation requires an explicit user action.
 - Non-flexible tasks may be flagged when their accepted block conflicts, but JotCue must not offer an automatic move suggestion for them.
 - Scheduling preferences may sync through the existing user settings document, but calendar event contents must remain local/in-memory.
+
+
+External-context rules:
+- Android text shares are review inputs only. Receiving shared content must not create or persist a note, task, project, reminder, or calendar entry without explicit user confirmation.
+- Keep share ingestion local and transient until the user confirms a save/create action. Do not upload shared content merely because another app sent it to JotCue.
+- Reuse the existing Quick Capture parser/service rather than creating a second task/project source of truth.
+- External API integrations (Gmail, Google Calendar cloud APIs, etc.) require separate privacy/scoping work and must not be smuggled into share-intent patches.

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -12,6 +13,9 @@ import '../../../core/services/alarm_handoff_service.dart';
 import '../../../core/widgets/adaptive_shell.dart';
 import '../../../core/widgets/pulse_components.dart';
 import '../../../core/services/firebase_providers.dart';
+import '../../capture/presentation/natural_language_capture_sheet.dart';
+import '../../external_context/models/shared_capture_payload.dart';
+import '../../external_context/providers/external_context_providers.dart';
 import '../../profile/presentation/profile_screen.dart';
 import '../../profile/providers/user_profile_providers.dart';
 import '../../planning/presentation/plan_screen.dart';
@@ -46,6 +50,10 @@ class NotesHomeScreen extends ConsumerStatefulWidget {
 
 class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
   StreamSubscription<String?>? _notificationSelectionSubscription;
+  StreamSubscription<SharedCapturePayload>? _sharedCaptureSubscription;
+  final Queue<SharedCapturePayload> _pendingSharedCaptures =
+      Queue<SharedCapturePayload>();
+  bool _showingSharedCapture = false;
   late final TextEditingController _searchController;
   MobileNoteFilter _homeFilter = MobileNoteFilter.all;
   _DesktopNoteFilter _desktopFilter = _DesktopNoteFilter.all;
@@ -70,11 +78,22 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
             _creatingDesktopNote = false;
           });
         });
+
+    final shareService = ref.read(deviceShareServiceProvider);
+    _sharedCaptureSubscription = shareService.sharedContent.listen((payload) {
+      if (!mounted) {
+        return;
+      }
+      _pendingSharedCaptures.add(payload);
+      _showNextSharedCapture();
+    });
+    unawaited(shareService.initialize());
   }
 
   @override
   void dispose() {
     _notificationSelectionSubscription?.cancel();
+    _sharedCaptureSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -231,6 +250,32 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
         selectedNote: selectedNote,
       ),
     );
+  }
+
+  void _showNextSharedCapture() {
+    if (!mounted || _showingSharedCapture || _pendingSharedCaptures.isEmpty) {
+      return;
+    }
+    final payload = _pendingSharedCaptures.removeFirst();
+    _showingSharedCapture = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        _showingSharedCapture = false;
+        return;
+      }
+      try {
+        await showNaturalLanguageCaptureSheet(
+          context: context,
+          initialText: payload.captureText,
+          sourceLabel: 'another app',
+        );
+      } finally {
+        if (mounted) {
+          _showingSharedCapture = false;
+          _showNextSharedCapture();
+        }
+      }
+    });
   }
 
   void _selectDestination(int index) {

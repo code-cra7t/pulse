@@ -9,17 +9,29 @@ import '../providers/capture_providers.dart';
 
 Future<void> showNaturalLanguageCaptureSheet({
   required BuildContext context,
+  String initialText = '',
+  String? sourceLabel,
 }) async {
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (context) => const NaturalLanguageCaptureSheet(),
+    builder: (context) => NaturalLanguageCaptureSheet(
+      initialText: initialText,
+      sourceLabel: sourceLabel,
+    ),
   );
 }
 
 class NaturalLanguageCaptureSheet extends ConsumerStatefulWidget {
-  const NaturalLanguageCaptureSheet({super.key});
+  const NaturalLanguageCaptureSheet({
+    super.key,
+    this.initialText = '',
+    this.sourceLabel,
+  });
+
+  final String initialText;
+  final String? sourceLabel;
 
   @override
   ConsumerState<NaturalLanguageCaptureSheet> createState() =>
@@ -34,7 +46,10 @@ class _NaturalLanguageCaptureSheetState
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController();
+    _controller = TextEditingController(text: widget.initialText);
+    _controller.selection = TextSelection.collapsed(
+      offset: _controller.text.length,
+    );
   }
 
   @override
@@ -69,12 +84,16 @@ class _NaturalLanguageCaptureSheetState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Quick capture',
+                        widget.sourceLabel == null
+                            ? 'Quick capture'
+                            : 'Shared to JotCue',
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Write it naturally. Review before JotCue creates anything.',
+                        widget.sourceLabel == null
+                            ? 'Write it naturally. Review before JotCue creates anything.'
+                            : 'Review what ${widget.sourceLabel} shared before JotCue saves or structures it.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),

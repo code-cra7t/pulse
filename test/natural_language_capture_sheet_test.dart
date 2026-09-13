@@ -59,4 +59,39 @@ void main() {
     expect(find.byKey(const ValueKey('save-capture-as-note')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('shared text is prefilled and remains review-first at 320 px', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: AppTheme.build(),
+          home: const Scaffold(
+            body: NaturalLanguageCaptureSheet(
+              initialText: 'Submit HPC report by Sep 30',
+              sourceLabel: 'another app',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Shared to JotCue'), findsOneWidget);
+    expect(
+      find.textContaining('Review what another app shared'),
+      findsOneWidget,
+    );
+    expect(find.text('JotCue found a Task'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('confirm-structured-capture')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('save-capture-as-note')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
