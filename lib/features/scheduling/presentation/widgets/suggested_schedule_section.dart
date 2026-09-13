@@ -10,6 +10,7 @@ import '../../models/scheduling_day_state.dart';
 typedef ScheduleBlockCalendarCheck = Future<bool> Function(ScheduleBlock block);
 typedef ScheduleBlockCalendarAction =
     Future<bool> Function(ScheduleBlock block);
+typedef ScheduleBlockAutomationCheck = bool Function(ScheduleBlock block);
 
 class SuggestedScheduleSection extends StatelessWidget {
   const SuggestedScheduleSection({
@@ -23,6 +24,7 @@ class SuggestedScheduleSection extends StatelessWidget {
     required this.onCalendarLinked,
     required this.onAddOrUpdateCalendar,
     required this.onRemoveCalendar,
+    required this.wasMovedByJotCue,
   });
 
   final AsyncValue<SchedulingDayState> state;
@@ -34,6 +36,7 @@ class SuggestedScheduleSection extends StatelessWidget {
   final ScheduleBlockCalendarCheck onCalendarLinked;
   final ScheduleBlockCalendarAction onAddOrUpdateCalendar;
   final ScheduleBlockCalendarAction onRemoveCalendar;
+  final ScheduleBlockAutomationCheck wasMovedByJotCue;
 
   @override
   Widget build(BuildContext context) {
@@ -84,6 +87,7 @@ class SuggestedScheduleSection extends StatelessWidget {
             onCalendarLinked: onCalendarLinked,
             onAddOrUpdateCalendar: onAddOrUpdateCalendar,
             onRemoveCalendar: onRemoveCalendar,
+            wasMovedByJotCue: wasMovedByJotCue,
           ),
         ),
       ],
@@ -102,6 +106,7 @@ class _ScheduleStateCard extends StatelessWidget {
     required this.onCalendarLinked,
     required this.onAddOrUpdateCalendar,
     required this.onRemoveCalendar,
+    required this.wasMovedByJotCue,
   });
 
   final SchedulingDayState value;
@@ -113,6 +118,7 @@ class _ScheduleStateCard extends StatelessWidget {
   final ScheduleBlockCalendarCheck onCalendarLinked;
   final ScheduleBlockCalendarAction onAddOrUpdateCalendar;
   final ScheduleBlockCalendarAction onRemoveCalendar;
+  final ScheduleBlockAutomationCheck wasMovedByJotCue;
 
   @override
   Widget build(BuildContext context) {
@@ -259,6 +265,7 @@ class _ScheduleStateCard extends StatelessWidget {
                 onCalendarLinked: onCalendarLinked,
                 onAddOrUpdateCalendar: onAddOrUpdateCalendar,
                 onRemoveCalendar: onRemoveCalendar,
+                movedByJotCue: wasMovedByJotCue(block),
               ),
             ),
           ),
@@ -335,6 +342,7 @@ class _AcceptedScheduleBlock extends StatefulWidget {
     required this.onCalendarLinked,
     required this.onAddOrUpdateCalendar,
     required this.onRemoveCalendar,
+    required this.movedByJotCue,
   });
 
   final ScheduleBlock block;
@@ -343,6 +351,7 @@ class _AcceptedScheduleBlock extends StatefulWidget {
   final ScheduleBlockCalendarCheck onCalendarLinked;
   final ScheduleBlockCalendarAction onAddOrUpdateCalendar;
   final ScheduleBlockCalendarAction onRemoveCalendar;
+  final bool movedByJotCue;
 
   @override
   State<_AcceptedScheduleBlock> createState() => _AcceptedScheduleBlockState();
@@ -412,11 +421,14 @@ class _AcceptedScheduleBlockState extends State<_AcceptedScheduleBlock> {
                 FutureBuilder<bool>(
                   future: _linked,
                   builder: (context, snapshot) {
-                    final suffix = snapshot.data == true
+                    final calendarSuffix = snapshot.data == true
                         ? ' · Calendar linked'
                         : '';
+                    final automationSuffix = widget.movedByJotCue
+                        ? ' · Moved by JotCue'
+                        : '';
                     return Text(
-                      '${_formatClock(context, widget.block.startsAt)}–${_formatClock(context, widget.block.endsAt)} · Accepted on this device$suffix',
+                      '${_formatClock(context, widget.block.startsAt)}–${_formatClock(context, widget.block.endsAt)} · Accepted on this device$automationSuffix$calendarSuffix',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall,

@@ -9,9 +9,12 @@ import '../../../core/widgets/adaptive_shell.dart';
 import '../../../core/widgets/pulse_components.dart';
 import '../../automation/models/automation_audit_entry.dart';
 import '../../automation/models/automation_preferences.dart';
+import '../../automation/models/automation_safety_preferences.dart';
 import '../../automation/presentation/automation_activity_section.dart';
+import '../../automation/presentation/automation_safety_sheet.dart';
 import '../../automation/providers/automation_providers.dart';
 import '../../automation/providers/trusted_automation_providers.dart';
+import '../../auth/providers/auth_providers.dart';
 import '../../calendar/providers/calendar_providers.dart';
 import '../../projects/models/project.dart';
 import '../../scheduling/models/schedule_block.dart';
@@ -68,10 +71,14 @@ class PlanScreen extends ConsumerWidget {
       adaptiveReplanningProvider(replanningNow),
     );
     final automationPreferences = ref.watch(automationPreferencesProvider);
-    final automationActivity =
-        automationPreferences.level == AutomationLevel.trusted
-        ? ref.watch(automationAuditStreamProvider)
-        : const AsyncData<List<AutomationAuditEntry>>([]);
+    final automationActivity = ref.watch(automationAuditStreamProvider);
+    final automationEntries =
+        automationActivity.asData?.value ?? const <AutomationAuditEntry>[];
+    final automationSafety =
+        ref.watch(automationSafetyPreferencesProvider).asData?.value ??
+        const AutomationSafetyPreferences();
+    final trustedEnabled =
+        automationPreferences.level == AutomationLevel.trusted;
     final trustedSweepProvider = trustedAutomationSweepProvider(replanningNow);
     ref.listen<AsyncValue<AutomationAuditEntry?>>(trustedSweepProvider, (
       previous,
@@ -179,10 +186,23 @@ class PlanScreen extends ConsumerWidget {
                   ),
                   if (replanningAsync.asData?.value.needsAttention == true)
                     const SizedBox(height: AppSpacing.xl),
-                  AutomationActivitySection(state: automationActivity),
-                  if ((automationActivity.asData?.value ??
-                          const <AutomationAuditEntry>[])
-                      .isNotEmpty)
+                  AutomationActivitySection(
+                    state: automationActivity,
+                    safety: automationSafety,
+                    trustedEnabled: trustedEnabled,
+                    onTogglePaused: (paused) =>
+                        _setTrustedAutomationPaused(context, ref, paused),
+                    onManageSafety: () =>
+                        _editAutomationSafety(context, ref, tasks, projects),
+                    onUndo: (entry) =>
+                        _undoTrustedMove(context, ref, replanningNow, entry),
+                    onClearOlderActivity: () => _clearOlderAutomationActivity(
+                      context,
+                      ref,
+                      replanningNow,
+                    ),
+                  ),
+                  if (automationEntries.isNotEmpty || trustedEnabled)
                     const SizedBox(height: AppSpacing.xl),
                   SuggestedScheduleSection(
                     state: scheduleAsync,
@@ -213,6 +233,8 @@ class PlanScreen extends ConsumerWidget {
                         _addOrUpdateScheduleCalendar(context, ref, block),
                     onRemoveCalendar: (block) =>
                         _removeScheduleCalendar(context, ref, block),
+                    wasMovedByJotCue: (block) =>
+                        _wasMovedByJotCue(block, automationEntries),
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   SectionHeader(
@@ -315,6 +337,201 @@ class PlanScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _setTrustedAutomationPaused(
+    BuildContext context,
+    WidgetRef ref,
+    bool paused,
+  ) async {
+    final user = ref.read(authStateChangesProvider).asData?.value;
+    if (user == null) {
+      return;
+    }
+    try {
+      final store = ref.read(offlineAutomationSafetyStoreProvider);
+      final current = await store.readPreferences(user.uid);
+      await store.writePreferences(user.uid, current.copyWith(paused: paused));
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            paused
+                ? 'Trusted schedule moves are paused on this device.'
+                : 'Trusted schedule moves are active again on this device.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update automation safety: $error')),
+      );
+    }
+  }
+
+  Future<void> _editAutomationSafety(
+    BuildContext context,
+    WidgetRef ref,
+    List<Task> tasks,
+    List<Project> projects,
+  ) async {
+    final user = ref.read(authStateChangesProvider).asData?.value;
+    if (user == null) {
+      return;
+    }
+    try {
+      final store = ref.read(offlineAutomationSafetyStoreProvider);
+      final current = await store.readPreferences(user.uid);
+      if (!context.mounted) {
+        return;
+      }
+      final updated = await showAutomationSafetySheet(
+        context: context,
+        initial: current,
+        tasks: tasks,
+        projects: projects,
+      );
+      if (updated == null) {
+        return;
+      }
+      await store.writePreferences(user.uid, updated);
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save automation safety: $error')),
+      );
+    }
+  }
+
+  Future<void> _undoTrustedMove(
+    BuildContext context,
+    WidgetRef ref,
+    DateTime replanningNow,
+    AutomationAuditEntry entry,
+  ) async {
+    try {
+      await ref
+          .read(trustedScheduleUndoServiceProvider)
+          .undo(userId: entry.userId, entry: entry, now: replanningNow);
+      ref.invalidate(adaptiveReplanningProvider(replanningNow));
+      ref.invalidate(
+        schedulingDayProvider(
+          DateTime(
+            entry.fromStartsAt.year,
+            entry.fromStartsAt.month,
+            entry.fromStartsAt.day,
+          ),
+        ),
+      );
+      ref.invalidate(
+        schedulingDayProvider(
+          DateTime(
+            entry.toStartsAt.year,
+            entry.toStartsAt.month,
+            entry.toStartsAt.day,
+          ),
+        ),
+      );
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Restored “${entry.title}” to its earlier slot.'),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not undo trusted move: $error')),
+      );
+    }
+  }
+
+  Future<void> _clearOlderAutomationActivity(
+    BuildContext context,
+    WidgetRef ref,
+    DateTime now,
+  ) async {
+    final user = ref.read(authStateChangesProvider).asData?.value;
+    if (user == null) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear older automation activity?'),
+        content: const Text(
+          'This removes older device-local audit entries. In-progress records and recent moves or undos inside the 30-minute safety window are kept.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Clear older'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+    try {
+      final removed = await ref
+          .read(offlineAutomationAuditStoreProvider)
+          .clearOlderEntries(user.uid, now: now);
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            removed == 0
+                ? 'No older automation activity was safe to clear.'
+                : 'Cleared $removed older automation entr${removed == 1 ? 'y' : 'ies'}.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not clear automation activity: $error')),
+      );
+    }
+  }
+
+  bool _wasMovedByJotCue(
+    ScheduleBlock block,
+    List<AutomationAuditEntry> entries,
+  ) {
+    for (final entry in entries) {
+      if (entry.blockId != block.id) {
+        continue;
+      }
+      if (entry.status == AutomationAuditStatus.succeeded ||
+          entry.status == AutomationAuditStatus.undoPending) {
+        return block.startsAt == entry.toStartsAt &&
+            block.endsAt == entry.toEndsAt;
+      }
+      if (entry.status == AutomationAuditStatus.undone) {
+        return false;
+      }
+    }
+    return false;
   }
 
   Future<void> _configureAvailability(

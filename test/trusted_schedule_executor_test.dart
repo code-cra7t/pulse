@@ -5,6 +5,7 @@ import 'package:pulse/features/automation/data/automation_policy.dart';
 import 'package:pulse/features/automation/data/trusted_schedule_executor.dart';
 import 'package:pulse/features/automation/models/automation_audit_entry.dart';
 import 'package:pulse/features/automation/models/automation_preferences.dart';
+import 'package:pulse/features/automation/models/automation_safety_preferences.dart';
 import 'package:pulse/features/scheduling/data/local_schedule_blocks_repository.dart';
 import 'package:pulse/features/scheduling/models/replanning_overview.dart';
 import 'package:pulse/features/scheduling/models/schedule_block.dart';
@@ -376,6 +377,174 @@ void main() {
       DateTime(2026, 9, 14, 9),
     );
   });
+
+  test('paused device safety prevents trusted execution', () async {
+    final now = DateTime(2026, 9, 13, 12);
+    final block = await _accept(repository, 'one', DateTime(2026, 9, 14, 9));
+
+    final entry = await _executor(repository, auditStore, linked: false)
+        .executeNext(
+          userId: 'user',
+          preferences: const AutomationPreferences(
+            level: AutomationLevel.trusted,
+          ),
+          safety: const AutomationSafetyPreferences(paused: true),
+          overview: _overview(now, [
+            _issue(
+              block,
+              DateTime(2026, 9, 14, 11),
+              ReplanningIssueKind.calendarConflict,
+            ),
+          ]),
+          tasks: [_task('one')],
+          now: now,
+        );
+
+    expect(entry, isNull);
+    expect(
+      (await repository.readBlocks('user')).single.startsAt,
+      DateTime(2026, 9, 14, 9),
+    );
+  });
+
+  test('task exclusion prevents trusted execution', () async {
+    final now = DateTime(2026, 9, 13, 12);
+    final block = await _accept(repository, 'one', DateTime(2026, 9, 14, 9));
+
+    final entry = await _executor(repository, auditStore, linked: false)
+        .executeNext(
+          userId: 'user',
+          preferences: const AutomationPreferences(
+            level: AutomationLevel.trusted,
+          ),
+          safety: const AutomationSafetyPreferences(excludedTaskIds: {'one'}),
+          overview: _overview(now, [
+            _issue(
+              block,
+              DateTime(2026, 9, 14, 11),
+              ReplanningIssueKind.calendarConflict,
+            ),
+          ]),
+          tasks: [_task('one')],
+          now: now,
+        );
+
+    expect(entry, isNull);
+  });
+
+  test('project exclusion prevents trusted execution', () async {
+    final now = DateTime(2026, 9, 13, 12);
+    final block = await _accept(repository, 'one', DateTime(2026, 9, 14, 9));
+
+    final entry = await _executor(repository, auditStore, linked: false)
+        .executeNext(
+          userId: 'user',
+          preferences: const AutomationPreferences(
+            level: AutomationLevel.trusted,
+          ),
+          safety: const AutomationSafetyPreferences(
+            excludedProjectIds: {'project-1'},
+          ),
+          overview: _overview(now, [
+            _issue(
+              block,
+              DateTime(2026, 9, 14, 11),
+              ReplanningIssueKind.calendarConflict,
+            ),
+          ]),
+          tasks: [_task('one', projectId: 'project-1')],
+          now: now,
+        );
+
+    expect(entry, isNull);
+  });
+
+  test('recent trusted move enforces per-block cooldown', () async {
+    final now = DateTime(2026, 9, 13, 12);
+    final block = await _accept(repository, 'one', DateTime(2026, 9, 14, 9));
+    await auditStore.upsert(
+      AutomationAuditEntry(
+        id: 'recent',
+        userId: 'user',
+        action: AutomationActionKind.localScheduleMove,
+        issueId: 'older-issue',
+        blockId: block.id,
+        title: block.title,
+        reason: 'Earlier move',
+        fromStartsAt: DateTime(2026, 9, 14, 8),
+        fromEndsAt: DateTime(2026, 9, 14, 9),
+        toStartsAt: block.startsAt,
+        toEndsAt: block.endsAt,
+        executedAt: now.subtract(const Duration(minutes: 10)),
+        status: AutomationAuditStatus.succeeded,
+      ),
+    );
+
+    final entry = await _executor(repository, auditStore, linked: false)
+        .executeNext(
+          userId: 'user',
+          preferences: const AutomationPreferences(
+            level: AutomationLevel.trusted,
+          ),
+          overview: _overview(now, [
+            _issue(
+              block,
+              DateTime(2026, 9, 14, 11),
+              ReplanningIssueKind.calendarConflict,
+            ),
+          ]),
+          tasks: [_task('one')],
+          now: now,
+        );
+
+    expect(entry, isNull);
+    expect(
+      (await repository.readBlocks('user')).single.startsAt,
+      DateTime(2026, 9, 14, 9),
+    );
+  });
+
+  test('recent undo also cools down the same block', () async {
+    final now = DateTime(2026, 9, 13, 12);
+    final block = await _accept(repository, 'one', DateTime(2026, 9, 14, 9));
+    await auditStore.upsert(
+      AutomationAuditEntry(
+        id: 'recent-undo',
+        userId: 'user',
+        action: AutomationActionKind.localScheduleMove,
+        issueId: 'older-issue',
+        blockId: block.id,
+        title: block.title,
+        reason: 'Earlier move',
+        fromStartsAt: block.startsAt,
+        fromEndsAt: block.endsAt,
+        toStartsAt: DateTime(2026, 9, 14, 11),
+        toEndsAt: DateTime(2026, 9, 14, 12),
+        executedAt: now.subtract(const Duration(minutes: 20)),
+        status: AutomationAuditStatus.undone,
+        undoneAt: now.subtract(const Duration(minutes: 5)),
+      ),
+    );
+
+    final entry = await _executor(repository, auditStore, linked: false)
+        .executeNext(
+          userId: 'user',
+          preferences: const AutomationPreferences(
+            level: AutomationLevel.trusted,
+          ),
+          overview: _overview(now, [
+            _issue(
+              block,
+              DateTime(2026, 9, 14, 11),
+              ReplanningIssueKind.calendarConflict,
+            ),
+          ]),
+          tasks: [_task('one')],
+          now: now,
+        );
+
+    expect(entry, isNull);
+  });
 }
 
 TrustedScheduleExecutor _executor(
@@ -411,7 +580,7 @@ Future<ScheduleBlock> _accept(
   );
 }
 
-Task _task(String id, {bool flexible = true}) {
+Task _task(String id, {bool flexible = true, String? projectId}) {
   return Task(
     id: id,
     userId: 'user',
@@ -419,6 +588,7 @@ Task _task(String id, {bool flexible = true}) {
     isCompleted: false,
     sourceNoteId: 'note-$id',
     sourceLineIndex: 0,
+    projectId: projectId,
     isFlexible: flexible,
   );
 }

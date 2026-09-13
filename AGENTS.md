@@ -65,3 +65,12 @@ Trusted automation rules:
 - Trusted moves must fail closed when calendar-link state cannot be verified, when the source block is stale, when the task is missing/non-flexible/completed, or when the block was user-created.
 - Execute at most one move per replanning snapshot, then recompute availability/replanning before considering another.
 - Every successful trusted move must be appended to the device-local automation audit store. Do not upload the audit trail unless a later privacy-reviewed design explicitly introduces sync.
+
+## Patch 17 trusted-automation safety guardrails
+- Keep the account-wide automation level separate from device-local trusted-execution safety controls.
+- Trusted execution must fail closed when local safety state, audit history, or calendar-link state cannot be verified.
+- Respect device-local pause, task exclusions, project exclusions, and the per-block cooldown before any trusted move.
+- Never auto-move a calendar-linked block, past block, non-flexible task, user-created block, or stale schedule snapshot.
+- Undo is user-initiated only. It must reject stale/currently changed blocks, linked calendar copies, past original slots, and conflicting original slots.
+- Audit cleanup must preserve pending/undo-pending entries and any applied move/undo still inside the cooldown window.
+- Do not broaden Trusted to calendar writes, capture creation, completion/missed decisions, or background execution without a separately reviewed patch.

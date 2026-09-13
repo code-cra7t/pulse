@@ -5,6 +5,7 @@ import '../../scheduling/models/schedule_block.dart';
 import '../../tasks/models/task.dart';
 import '../models/automation_audit_entry.dart';
 import '../models/automation_preferences.dart';
+import '../models/automation_safety_preferences.dart';
 import 'automation_policy.dart';
 
 typedef CalendarLinkChecker = Future<bool> Function(String blockId);
@@ -17,15 +18,19 @@ class TrustedScheduleExecutor {
     required ScheduleBlocksRepository scheduleBlocks,
     required OfflineAutomationAuditStore auditStore,
     required CalendarLinkChecker isCalendarLinked,
+    this.cooldown = const Duration(minutes: 30),
   }) : _policy = policy,
        _scheduleBlocks = scheduleBlocks,
        _auditStore = auditStore,
        _isCalendarLinked = isCalendarLinked;
 
+  static const Duration defaultCooldown = Duration(minutes: 30);
+
   final AutomationPolicy _policy;
   final ScheduleBlocksRepository _scheduleBlocks;
   final OfflineAutomationAuditStore _auditStore;
   final CalendarLinkChecker _isCalendarLinked;
+  final Duration cooldown;
 
   Future<AutomationAuditEntry?> executeNext({
     required String userId,
@@ -33,12 +38,13 @@ class TrustedScheduleExecutor {
     required ReplanningOverview overview,
     required List<Task> tasks,
     required DateTime now,
+    AutomationSafetyPreferences safety = const AutomationSafetyPreferences(),
   }) async {
     final decision = _policy.evaluate(
       preferences: preferences,
       action: AutomationActionKind.localScheduleMove,
     );
-    if (decision != AutomationDecision.trustedEligible) {
+    if (decision != AutomationDecision.trustedEligible || safety.paused) {
       return null;
     }
 
@@ -47,6 +53,9 @@ class TrustedScheduleExecutor {
     final currentById = <String, ScheduleBlock>{
       for (final block in currentBlocks) block.id: block,
     };
+    // Reading the local audit log is part of the safety decision. If this
+    // fails, execution fails closed rather than bypassing cooldown protection.
+    final auditEntries = await _auditStore.readEntries(userId);
 
     for (final issue in overview.issues) {
       if (!_trustedIssueKind(issue.kind)) {
@@ -71,6 +80,13 @@ class TrustedScheduleExecutor {
 
       final task = taskById[block.taskId];
       if (task == null || !task.isFlexible || task.isCompleted) {
+        continue;
+      }
+      if (safety.excludesTask(task.id) ||
+          safety.excludesProject(task.projectId)) {
+        continue;
+      }
+      if (_isCoolingDown(block.id, auditEntries, now, cooldown)) {
         continue;
       }
       if (!suggestion.endsAt.isAfter(suggestion.startsAt) ||
@@ -110,26 +126,12 @@ class TrustedScheduleExecutor {
       // schedule remains untouched.
       await _auditStore.upsert(entry);
       try {
-        final moved = await _scheduleBlocks.rescheduleBlock(
+        await _scheduleBlocks.rescheduleBlock(
           block: block,
           startsAt: suggestion.startsAt,
           endsAt: suggestion.endsAt,
         );
-        entry = AutomationAuditEntry(
-          id: entry.id,
-          userId: entry.userId,
-          action: entry.action,
-          issueId: entry.issueId,
-          blockId: entry.blockId,
-          title: entry.title,
-          reason: entry.reason,
-          fromStartsAt: entry.fromStartsAt,
-          fromEndsAt: entry.fromEndsAt,
-          toStartsAt: moved.startsAt,
-          toEndsAt: moved.endsAt,
-          executedAt: entry.executedAt,
-          status: AutomationAuditStatus.succeeded,
-        );
+        entry = entry.copyWith(status: AutomationAuditStatus.succeeded);
         await _auditStore.upsert(entry);
         return entry;
       } catch (error) {
@@ -160,4 +162,30 @@ bool _sameBlockState(ScheduleBlock current, ScheduleBlock proposed) {
       current.endsAt == proposed.endsAt &&
       current.status == proposed.status &&
       current.source == proposed.source;
+}
+
+bool _isCoolingDown(
+  String blockId,
+  List<AutomationAuditEntry> entries,
+  DateTime now,
+  Duration cooldown,
+) {
+  if (cooldown.inMicroseconds <= 0) {
+    return false;
+  }
+  for (final entry in entries) {
+    if (entry.blockId != blockId || !entry.wasApplied) {
+      continue;
+    }
+    final anchor = entry.cooldownAnchor;
+    if (anchor.isAfter(now)) {
+      // Plan rounds its snapshot time to the minute while audit timestamps keep
+      // seconds/microseconds. Treat that small future skew as still cooling down.
+      return true;
+    }
+    if (now.difference(anchor) < cooldown) {
+      return true;
+    }
+  }
+  return false;
 }

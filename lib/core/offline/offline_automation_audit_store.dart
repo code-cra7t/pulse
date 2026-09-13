@@ -64,6 +64,36 @@ class OfflineAutomationAuditStore {
     await _emit(entry.userId);
   }
 
+  Future<int> clearOlderEntries(
+    String userId, {
+    required DateTime now,
+    Duration preserveRecent = const Duration(minutes: 30),
+  }) async {
+    final database = await _database;
+    final snapshots = await _store.find(
+      database,
+      finder: Finder(filter: Filter.equals('userId', userId)),
+    );
+    var removed = 0;
+    for (final snapshot in snapshots) {
+      final entry = AutomationAuditEntry.fromLocalMap(snapshot.value);
+      if (entry.status == AutomationAuditStatus.pending ||
+          entry.status == AutomationAuditStatus.undoPending) {
+        continue;
+      }
+      if (entry.wasApplied && preserveRecent.inMicroseconds > 0) {
+        final anchor = entry.cooldownAnchor;
+        if (anchor.isAfter(now) || now.difference(anchor) < preserveRecent) {
+          continue;
+        }
+      }
+      await _store.record(snapshot.key).delete(database);
+      removed += 1;
+    }
+    await _emit(userId);
+    return removed;
+  }
+
   Future<void> clearUser(String userId) async {
     final database = await _database;
     await _store.delete(

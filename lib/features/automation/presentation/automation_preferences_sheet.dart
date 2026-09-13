@@ -84,7 +84,7 @@ class _AutomationPreferencesSheetState
             child: const Padding(
               padding: EdgeInsets.all(AppSpacing.md),
               child: Text(
-                'Safety boundary: calendar writes, creating captured content, and deciding whether work was completed or missed always require your approval. Trusted may move only future flexible JotCue proposal blocks while Plan is open, never linked calendar copies. Every trusted move is recorded locally on this device.',
+                'Safety boundary: calendar writes, creating captured content, and deciding whether work was completed or missed always require your approval. Trusted may move only future flexible JotCue proposal blocks while Plan is open, never linked calendar copies. Device-local pause/exclusion controls, cooldown protection, audit history, and safe undo remain available separately.',
               ),
             ),
           ),

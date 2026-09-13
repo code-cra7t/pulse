@@ -3,7 +3,9 @@ import '../data/automation_policy.dart';
 enum AutomationAuditStatus {
   pending,
   succeeded,
-  failed;
+  failed,
+  undoPending,
+  undone;
 
   static AutomationAuditStatus fromValue(String? value) {
     return AutomationAuditStatus.values.firstWhere(
@@ -29,6 +31,9 @@ class AutomationAuditEntry {
     required this.executedAt,
     required this.status,
     this.error,
+    this.undoRequestedAt,
+    this.undoneAt,
+    this.undoError,
   });
 
   final String id;
@@ -45,10 +50,23 @@ class AutomationAuditEntry {
   final DateTime executedAt;
   final AutomationAuditStatus status;
   final String? error;
+  final DateTime? undoRequestedAt;
+  final DateTime? undoneAt;
+  final String? undoError;
+
+  DateTime get cooldownAnchor => undoneAt ?? undoRequestedAt ?? executedAt;
+
+  bool get wasApplied =>
+      status == AutomationAuditStatus.succeeded ||
+      status == AutomationAuditStatus.undoPending ||
+      status == AutomationAuditStatus.undone;
 
   AutomationAuditEntry copyWith({
     AutomationAuditStatus? status,
     Object? error = _unchanged,
+    Object? undoRequestedAt = _unchanged,
+    Object? undoneAt = _unchanged,
+    Object? undoError = _unchanged,
   }) {
     return AutomationAuditEntry(
       id: id,
@@ -65,6 +83,15 @@ class AutomationAuditEntry {
       executedAt: executedAt,
       status: status ?? this.status,
       error: identical(error, _unchanged) ? this.error : error as String?,
+      undoRequestedAt: identical(undoRequestedAt, _unchanged)
+          ? this.undoRequestedAt
+          : undoRequestedAt as DateTime?,
+      undoneAt: identical(undoneAt, _unchanged)
+          ? this.undoneAt
+          : undoneAt as DateTime?,
+      undoError: identical(undoError, _unchanged)
+          ? this.undoError
+          : undoError as String?,
     );
   }
 
@@ -94,6 +121,9 @@ class AutomationAuditEntry {
       ),
       status: AutomationAuditStatus.fromValue(data['status'] as String?),
       error: data['error'] as String?,
+      undoRequestedAt: _dateFromMilliseconds(data['undoRequestedAtMs']),
+      undoneAt: _dateFromMilliseconds(data['undoneAtMs']),
+      undoError: data['undoError'] as String?,
     );
   }
 
@@ -112,6 +142,9 @@ class AutomationAuditEntry {
     'executedAtMs': executedAt.millisecondsSinceEpoch,
     'status': status.name,
     'error': error,
+    'undoRequestedAtMs': undoRequestedAt?.millisecondsSinceEpoch,
+    'undoneAtMs': undoneAt?.millisecondsSinceEpoch,
+    'undoError': undoError,
   };
 }
 
@@ -120,6 +153,10 @@ AutomationActionKind _actionFromValue(String? value) {
     (action) => action.name == value,
     orElse: () => AutomationActionKind.localScheduleMove,
   );
+}
+
+DateTime? _dateFromMilliseconds(Object? value) {
+  return value is int ? DateTime.fromMillisecondsSinceEpoch(value) : null;
 }
 
 const _unchanged = Object();

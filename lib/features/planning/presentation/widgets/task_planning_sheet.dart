@@ -154,7 +154,7 @@ class _TaskPlanningSheetState extends State<_TaskPlanningSheet> {
               contentPadding: EdgeInsets.zero,
               title: const Text('Flexible'),
               subtitle: const Text(
-                'JotCue may suggest moving this task when schedules change.',
+                'JotCue may suggest moving this task when schedules change. In Trusted mode, it can auto-move only when your device safety controls allow it.',
               ),
               value: _isFlexible,
               onChanged: (value) => setState(() => _isFlexible = value),

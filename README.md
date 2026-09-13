@@ -87,3 +87,6 @@ and remote changes are merged back into the local database.
 
 Image uploads and reminder cleanup still require connectivity. Those workflows
 are separate hardening milestones.
+
+### Trusted automation safety (Patch 17)
+Trusted local schedule moves now have device-local pause controls, task/project exclusions, a 30-minute per-block cooldown, visible "Moved by JotCue" provenance, guarded undo, and safe cleanup of older audit activity. Undo only restores a block when the current block still matches the trusted move, the original slot is still in the future and conflict-free, and no external calendar link exists. These controls do not broaden Trusted permissions or add background automation.

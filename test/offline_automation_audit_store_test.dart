@@ -42,6 +42,40 @@ void main() {
     await store.clearUser('user');
     expect(await store.readEntries('user'), isEmpty);
   });
+
+  test(
+    'clears older history but preserves recent cooldown and pending entries',
+    () async {
+      await store.dispose();
+      final databaseName =
+          'jotcue-automation-retention-${DateTime.now().microsecondsSinceEpoch}.db';
+      store = OfflineAutomationAuditStore(
+        openDatabase: () => databaseFactoryMemory.openDatabase(databaseName),
+        maxEntriesPerUser: 10,
+      );
+      final now = DateTime(2026, 9, 13, 12);
+      await store.upsert(_entry('old', now.subtract(const Duration(hours: 2))));
+      await store.upsert(
+        _entry('recent', now.subtract(const Duration(minutes: 10))),
+      );
+      await store.upsert(
+        _entry(
+          'pending',
+          now.subtract(const Duration(hours: 3)),
+        ).copyWith(status: AutomationAuditStatus.pending),
+      );
+
+      final removed = await store.clearOlderEntries('user', now: now);
+      final entries = await store.readEntries('user');
+
+      expect(removed, 1);
+      expect(
+        entries.map((entry) => entry.id),
+        containsAll(['recent', 'pending']),
+      );
+      expect(entries.map((entry) => entry.id), isNot(contains('old')));
+    },
+  );
 }
 
 AutomationAuditEntry _entry(String id, DateTime time) {

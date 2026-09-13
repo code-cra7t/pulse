@@ -58,6 +58,7 @@ void main() {
               onCalendarLinked: (_) async => true,
               onAddOrUpdateCalendar: (_) async => true,
               onRemoveCalendar: (_) async => true,
+              wasMovedByJotCue: (_) => true,
             ),
           ),
         ),
@@ -66,6 +67,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Calendar linked'), findsOneWidget);
+    expect(find.textContaining('Moved by JotCue'), findsOneWidget);
     expect(find.byTooltip('Calendar options'), findsOneWidget);
     expect(tester.takeException(), isNull);
 

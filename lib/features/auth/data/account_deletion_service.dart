@@ -4,6 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/offline/offline_automation_audit_store.dart';
+import '../../../core/offline/offline_automation_safety_store.dart';
 import '../../../core/offline/offline_note_store.dart';
 import '../../../core/offline/offline_project_store.dart';
 import '../../../core/offline/offline_schedule_block_store.dart';
@@ -20,7 +21,8 @@ class AccountDeletionService {
     this._offlineNotes,
     this._offlineProjects,
     this._offlineScheduleBlocks,
-    this._offlineAutomationAudit, {
+    this._offlineAutomationAudit,
+    this._offlineAutomationSafety, {
     CalendarEventService? calendar,
     DeviceScheduleCalendarService? scheduleCalendar,
   }) : _calendar = calendar ?? CalendarEventService(),
@@ -36,6 +38,7 @@ class AccountDeletionService {
   final OfflineProjectStore _offlineProjects;
   final OfflineScheduleBlockStore _offlineScheduleBlocks;
   final OfflineAutomationAuditStore _offlineAutomationAudit;
+  final OfflineAutomationSafetyStore _offlineAutomationSafety;
   final CalendarEventService _calendar;
   final DeviceScheduleCalendarService _scheduleCalendar;
 
@@ -88,6 +91,7 @@ class AccountDeletionService {
     }
     await _offlineScheduleBlocks.clearUser(user.uid);
     await _offlineAutomationAudit.clearUser(user.uid);
+    await _offlineAutomationSafety.clearUser(user.uid);
     await _notifications.cancelAllReminders();
     await user.delete();
   }

@@ -18,5 +18,6 @@ final accountDeletionServiceProvider = Provider<AccountDeletionService>((ref) {
     ref.watch(offlineProjectStoreProvider),
     ref.watch(offlineScheduleBlockStoreProvider),
     ref.watch(offlineAutomationAuditStoreProvider),
+    ref.watch(offlineAutomationSafetyStoreProvider),
   );
 });

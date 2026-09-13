@@ -6,12 +6,19 @@ import '../../../core/services/firebase_providers.dart';
 import '../../../core/widgets/jotcue_brand.dart';
 import '../../../core/widgets/pulse_components.dart';
 import '../../automation/models/automation_preferences.dart';
+import '../../automation/models/automation_safety_preferences.dart';
 import '../../automation/presentation/automation_preferences_sheet.dart';
+import '../../automation/presentation/automation_safety_sheet.dart';
+import '../../automation/providers/trusted_automation_providers.dart';
 import '../../auth/providers/account_deletion_provider.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../notes/models/note_category.dart';
 import '../../profile/providers/user_profile_providers.dart';
+import '../../projects/models/project.dart';
+import '../../projects/providers/project_providers.dart';
 import '../../scheduling/presentation/widgets/scheduling_preferences_sheet.dart';
+import '../../tasks/models/task.dart';
+import '../../tasks/providers/task_providers.dart';
 import '../models/user_settings.dart';
 import '../providers/user_settings_providers.dart';
 import 'privacy_policy_screen.dart';
@@ -31,6 +38,12 @@ class SettingsScreen extends ConsumerWidget {
     final user = ref.watch(firebaseAuthProvider).currentUser;
     final profile = ref.watch(currentUserProfileProvider).asData?.value;
     final settingsAsync = ref.watch(currentUserSettingsProvider);
+    final automationSafety =
+        ref.watch(automationSafetyPreferencesProvider).asData?.value ??
+        const AutomationSafetyPreferences();
+    final tasks = ref.watch(tasksProvider);
+    final projects =
+        ref.watch(projectsStreamProvider).asData?.value ?? const <Project>[];
 
     return Scaffold(
       backgroundColor: embedded ? Colors.transparent : null,
@@ -270,6 +283,28 @@ class SettingsScreen extends ConsumerWidget {
                           effectiveSettings,
                         ),
                       ),
+                      const Divider(height: 1),
+                      ListTile(
+                        key: const ValueKey(
+                          'trusted-automation-safety-setting',
+                        ),
+                        leading: const Icon(Icons.shield_outlined),
+                        title: const Text('Trusted automation safety'),
+                        subtitle: Text(
+                          _automationSafetyLabel(
+                            automationSafety,
+                            effectiveSettings.automationPreferences.level,
+                          ),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => _editAutomationSafety(
+                          context,
+                          ref,
+                          user.uid,
+                          tasks,
+                          projects,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.md),
@@ -390,6 +425,35 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _editAutomationSafety(
+    BuildContext context,
+    WidgetRef ref,
+    String userId,
+    List<Task> tasks,
+    List<Project> projects,
+  ) async {
+    final store = ref.read(offlineAutomationSafetyStoreProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final current = await store.readPreferences(userId);
+      if (!context.mounted) {
+        return;
+      }
+      final updated = await showAutomationSafetySheet(
+        context: context,
+        initial: current,
+        tasks: tasks,
+        projects: projects,
+      );
+      if (updated == null) {
+        return;
+      }
+      await store.writePreferences(userId, updated);
+    } catch (error) {
+      _showError(messenger, error);
+    }
+  }
+
   void _showError(ScaffoldMessengerState messenger, Object error) {
     messenger
       ..hideCurrentSnackBar()
@@ -403,6 +467,22 @@ String _automationLevelLabel(AutomationLevel level) => switch (level) {
   AutomationLevel.approval => 'Act with approval',
   AutomationLevel.trusted => 'Trusted permissions',
 };
+
+String _automationSafetyLabel(
+  AutomationSafetyPreferences safety,
+  AutomationLevel level,
+) {
+  if (safety.paused) {
+    return 'Paused on this device';
+  }
+  if (level != AutomationLevel.trusted) {
+    return 'Applies when Trusted is enabled';
+  }
+  if (safety.exclusionCount == 0) {
+    return 'Active · 30-minute bounce protection';
+  }
+  return '${safety.exclusionCount} exclusion${safety.exclusionCount == 1 ? '' : 's'} · 30-minute cooldown';
+}
 
 class _DeleteAccountDialog extends ConsumerStatefulWidget {
   const _DeleteAccountDialog();
@@ -482,7 +562,7 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'This permanently deletes your notes, tasks, reminders, local planning blocks, uploaded images, settings, and JotCue account. This cannot be undone.',
+                'This permanently deletes your notes, tasks, reminders, local planning blocks, local automation history and safety controls, uploaded images, settings, and JotCue account. This cannot be undone.',
               ),
               const SizedBox(height: AppSpacing.md),
               TextFormField(

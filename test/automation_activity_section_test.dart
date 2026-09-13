@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pulse/core/services/app_theme.dart';
 import 'package:pulse/features/automation/data/automation_policy.dart';
 import 'package:pulse/features/automation/models/automation_audit_entry.dart';
+import 'package:pulse/features/automation/models/automation_safety_preferences.dart';
 import 'package:pulse/features/automation/presentation/automation_activity_section.dart';
 
 void main() {
@@ -12,6 +13,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
+    var undoRequested = false;
     final entry = AutomationAuditEntry(
       id: 'audit',
       userId: 'user',
@@ -34,7 +36,17 @@ void main() {
         theme: AppTheme.build(),
         home: Scaffold(
           body: SingleChildScrollView(
-            child: AutomationActivitySection(state: AsyncData([entry])),
+            child: AutomationActivitySection(
+              state: AsyncData([entry]),
+              safety: const AutomationSafetyPreferences(),
+              trustedEnabled: true,
+              onTogglePaused: (_) async {},
+              onManageSafety: () {},
+              onUndo: (_) async {
+                undoRequested = true;
+              },
+              onClearOlderActivity: () async {},
+            ),
           ),
         ),
       ),
@@ -43,6 +55,13 @@ void main() {
 
     expect(find.text('Automation activity'), findsOneWidget);
     expect(find.text('Moved'), findsOneWidget);
+    expect(find.text('Pause'), findsOneWidget);
+    expect(find.text('Clear older activity'), findsOneWidget);
+    final undo = find.text('Undo move');
+    await tester.ensureVisible(undo);
+    await tester.tap(undo);
+    await tester.pumpAndSettle();
+    expect(undoRequested, isTrue);
     expect(tester.takeException(), isNull);
   });
 }
