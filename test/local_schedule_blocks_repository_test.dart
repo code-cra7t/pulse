@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pulse/core/offline/offline_schedule_block_store.dart';
 import 'package:pulse/features/scheduling/data/local_schedule_blocks_repository.dart';
+import 'package:pulse/features/scheduling/models/schedule_block.dart';
 import 'package:pulse/features/scheduling/models/schedule_proposal.dart';
 import 'package:sembast/sembast_memory.dart';
 
@@ -36,6 +37,59 @@ void main() {
     expect(block.taskId, 'one');
     expect(block.title, 'Task one');
     expect(await repository.readBlocks('user'), hasLength(1));
+  });
+
+  test('reschedules an existing block without changing its identity', () async {
+    final block = await repository.acceptProposal(
+      userId: 'user',
+      proposal: _proposal(
+        'one',
+        DateTime(2026, 9, 14, 9),
+        DateTime(2026, 9, 14, 10),
+      ),
+    );
+
+    final moved = await repository.rescheduleBlock(
+      block: block,
+      startsAt: DateTime(2026, 9, 14, 11),
+      endsAt: DateTime(2026, 9, 14, 12),
+    );
+
+    expect(moved.id, block.id);
+    expect(moved.startsAt, DateTime(2026, 9, 14, 11));
+    expect(moved.status, ScheduleBlockStatus.scheduled);
+    expect(
+      (await repository.readBlocks('user')).single.startsAt,
+      moved.startsAt,
+    );
+  });
+
+  test('reschedule rejects overlap with another accepted block', () async {
+    final first = await repository.acceptProposal(
+      userId: 'user',
+      proposal: _proposal(
+        'one',
+        DateTime(2026, 9, 14, 9),
+        DateTime(2026, 9, 14, 10),
+      ),
+    );
+    await repository.acceptProposal(
+      userId: 'user',
+      proposal: _proposal(
+        'two',
+        DateTime(2026, 9, 14, 11),
+        DateTime(2026, 9, 14, 12),
+      ),
+    );
+
+    await expectLater(
+      repository.rescheduleBlock(
+        block: first,
+        startsAt: DateTime(2026, 9, 14, 11, 30),
+        endsAt: DateTime(2026, 9, 14, 12, 30),
+      ),
+      throwsStateError,
+    );
   });
 
   test('rejects an accepted proposal if its time now conflicts', () async {

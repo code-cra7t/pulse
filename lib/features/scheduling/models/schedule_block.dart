@@ -52,6 +52,9 @@ class ScheduleBlock {
 
   bool get isValid => endsAt.isAfter(startsAt);
   bool get occupiesTime => status == ScheduleBlockStatus.scheduled;
+  bool get countsTowardFocusBudget =>
+      status == ScheduleBlockStatus.scheduled ||
+      status == ScheduleBlockStatus.completed;
   Duration get duration => endsAt.difference(startsAt);
 
   ScheduleBlock copyWith({

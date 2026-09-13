@@ -63,6 +63,39 @@ class LocalScheduleBlocksRepository implements ScheduleBlocksRepository {
   }
 
   @override
+  Future<ScheduleBlock> rescheduleBlock({
+    required ScheduleBlock block,
+    required DateTime startsAt,
+    required DateTime endsAt,
+  }) async {
+    if (!endsAt.isAfter(startsAt)) {
+      throw ArgumentError('The rescheduled block must end after it starts.');
+    }
+    final existing = await _store.readBlocks(block.userId);
+    final conflicts = existing.any(
+      (other) =>
+          other.id != block.id &&
+          other.occupiesTime &&
+          other.startsAt.isBefore(endsAt) &&
+          other.endsAt.isAfter(startsAt),
+    );
+    if (conflicts) {
+      throw StateError(
+        'That time is no longer free. Refresh the replanning suggestion.',
+      );
+    }
+
+    final updated = block.copyWith(
+      startsAt: startsAt,
+      endsAt: endsAt,
+      status: ScheduleBlockStatus.scheduled,
+      updatedAt: DateTime.now(),
+    );
+    await _store.upsert(updated);
+    return updated;
+  }
+
+  @override
   Future<void> deleteBlock(String userId, String blockId) {
     return _store.delete(userId, blockId);
   }

@@ -113,6 +113,57 @@ void main() {
     expect(result.proposedMinutes, 60);
   });
 
+  test('completed focus blocks still count toward the daily focus cap', () {
+    final completed = ScheduleBlock(
+      id: 'completed',
+      userId: 'user',
+      taskId: 'done-session',
+      title: 'Completed session',
+      startsAt: at(8),
+      endsAt: at(9),
+      status: ScheduleBlockStatus.completed,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final result = engine.build(
+      now: now,
+      date: day,
+      preferences: preferences(preferred: 90, maxDaily: 120, breakMinutes: 0),
+      availability: availability([(at(10), at(14))]),
+      tasks: [_task('next', title: 'Next', estimate: 120)],
+      projects: const [],
+      existingBlocks: [completed],
+    );
+
+    expect(result.acceptedMinutes, 60);
+    expect(result.proposedMinutes, 60);
+  });
+
+  test('completed blocks reduce remaining effort for the same task', () {
+    final completed = ScheduleBlock(
+      id: 'completed-exam',
+      userId: 'user',
+      taskId: 'exam',
+      title: 'Exam prep',
+      startsAt: at(8),
+      endsAt: at(9),
+      status: ScheduleBlockStatus.completed,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final result = engine.build(
+      now: now,
+      date: day,
+      preferences: preferences(preferred: 90, breakMinutes: 0),
+      availability: availability([(at(10), at(14))]),
+      tasks: [_task('exam', title: 'Exam prep', estimate: 120)],
+      projects: const [],
+      existingBlocks: [completed],
+    );
+
+    expect(result.proposedMinutes, 60);
+  });
+
   test('existing future blocks reduce remaining effort for the same task', () {
     final accepted = ScheduleBlock(
       id: 'accepted',

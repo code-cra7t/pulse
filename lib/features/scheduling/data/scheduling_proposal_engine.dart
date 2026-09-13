@@ -24,7 +24,7 @@ class SchedulingProposalEngine {
     };
     final acceptedToday = existingBlocks
         .where((block) {
-          return block.occupiesTime && _sameDay(block.startsAt, day);
+          return block.countsTowardFocusBudget && _sameDay(block.startsAt, day);
         })
         .toList(growable: false);
     final acceptedMinutes = acceptedToday.fold<int>(
@@ -37,12 +37,15 @@ class SchedulingProposalEngine {
       remainingDailyBudget = 0;
     }
 
-    final plannedFutureByTask = <String, int>{};
+    final accountedMinutesByTask = <String, int>{};
     for (final block in existingBlocks) {
-      if (!block.occupiesTime || !block.endsAt.isAfter(now)) {
+      final countsAsProgress =
+          block.status == ScheduleBlockStatus.completed ||
+          (block.occupiesTime && block.endsAt.isAfter(now));
+      if (!countsAsProgress) {
         continue;
       }
-      plannedFutureByTask.update(
+      accountedMinutesByTask.update(
         block.taskId,
         (value) => value + block.duration.inMinutes,
         ifAbsent: () => block.duration.inMinutes,
@@ -64,7 +67,7 @@ class SchedulingProposalEngine {
       final assumedEffort = task.estimatedMinutes == null;
       final totalMinutes =
           task.estimatedMinutes ?? preferences.defaultTaskMinutes;
-      final alreadyPlanned = plannedFutureByTask[task.id] ?? 0;
+      final alreadyPlanned = accountedMinutesByTask[task.id] ?? 0;
       final remaining = totalMinutes - alreadyPlanned;
       if (remaining <= 0) {
         continue;

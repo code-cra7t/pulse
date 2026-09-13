@@ -200,7 +200,7 @@ class _ScheduleStateCard extends StatelessWidget {
                 value: _formatDurationMinutes(availability.freeMinutes),
               ),
               _ScheduleMetric(
-                label: 'Accepted',
+                label: 'Planned / done',
                 value: _formatDurationMinutes(
                   proposal?.acceptedMinutes ??
                       value.acceptedBlocks.fold<int>(

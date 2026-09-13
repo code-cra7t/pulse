@@ -15,6 +15,7 @@ Current product surfaces:
 - Plan (projects + task planning metadata)
 - Pulse (deterministic daily focus and attention cues)
 - Suggested scheduling (explicit availability + local calendar busy time + user-approved device-local blocks)
+- Adaptive replanning (reviewable drift/conflict/deadline-capacity suggestions)
 - Settings / profile
 
 Rules:
@@ -41,4 +42,6 @@ Calendar / availability rules:
 - Device calendar reads must stay bounded to near-term ranges (currently at most 31 days).
 - Scheduling proposals are suggestions only. Never write accepted work blocks to the external calendar unless a later patch explicitly introduces calendar-write approval.
 - Accepted JotCue schedule blocks are device-local until cross-device scheduling conflict semantics are designed.
+- Adaptive replanning is advisory: never silently mark a block completed/missed, move a block, or displace work. Every mutation requires an explicit user action.
+- Non-flexible tasks may be flagged when their accepted block conflicts, but JotCue must not offer an automatic move suggestion for them.
 - Scheduling preferences may sync through the existing user settings document, but calendar event contents must remain local/in-memory.

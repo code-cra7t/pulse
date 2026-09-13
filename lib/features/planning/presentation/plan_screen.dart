@@ -9,9 +9,12 @@ import '../../../core/widgets/pulse_components.dart';
 import '../../calendar/providers/calendar_providers.dart';
 import '../../projects/models/project.dart';
 import '../../scheduling/models/schedule_block.dart';
+import '../../scheduling/models/replanning_overview.dart';
 import '../../scheduling/models/schedule_proposal.dart';
+import '../../scheduling/presentation/widgets/adaptive_replanning_section.dart';
 import '../../scheduling/presentation/widgets/scheduling_preferences_sheet.dart';
 import '../../scheduling/presentation/widgets/suggested_schedule_section.dart';
+import '../../scheduling/providers/replanning_providers.dart';
 import '../../scheduling/providers/scheduling_providers.dart';
 import '../../settings/models/user_settings.dart';
 import '../../settings/providers/user_settings_providers.dart';
@@ -35,6 +38,13 @@ class PlanScreen extends ConsumerWidget {
     final projects = projectsAsync.asData?.value ?? const <Project>[];
     final tasks = ref.watch(tasksProvider);
     final currentTime = now ?? DateTime.now();
+    final replanningNow = DateTime(
+      currentTime.year,
+      currentTime.month,
+      currentTime.day,
+      currentTime.hour,
+      currentTime.minute,
+    );
     final overview = PlanOverview.build(
       projects: projects,
       tasks: tasks,
@@ -46,6 +56,9 @@ class PlanScreen extends ConsumerWidget {
       currentTime.day,
     );
     final scheduleAsync = ref.watch(schedulingDayProvider(planningDate));
+    final replanningAsync = ref.watch(
+      adaptiveReplanningProvider(replanningNow),
+    );
 
     final usesBottomNavigation =
         MediaQuery.sizeOf(context).width < AdaptiveShell.tabletBreakpoint;
@@ -80,15 +93,64 @@ class PlanScreen extends ConsumerWidget {
                     ),
                   ],
                   const SizedBox(height: AppSpacing.xl),
+                  AdaptiveReplanningSection(
+                    state: replanningAsync,
+                    onMove: (issue) => _moveReplanningBlock(
+                      context,
+                      ref,
+                      replanningNow,
+                      issue,
+                    ),
+                    onMarkCompleted: (block) => _setScheduleBlockStatus(
+                      context,
+                      ref,
+                      replanningNow,
+                      block,
+                      ScheduleBlockStatus.completed,
+                    ),
+                    onMarkMissed: (block) => _setScheduleBlockStatus(
+                      context,
+                      ref,
+                      replanningNow,
+                      block,
+                      ScheduleBlockStatus.skipped,
+                    ),
+                    onRemove: (block) => _removeScheduleBlock(
+                      context,
+                      ref,
+                      planningDate,
+                      block,
+                      replanningNow: replanningNow,
+                    ),
+                    onReviewTask: (taskId) => _reviewTaskById(
+                      context,
+                      ref,
+                      taskId,
+                      tasks,
+                      overview.projects,
+                    ),
+                  ),
+                  if (replanningAsync.asData?.value.needsAttention == true)
+                    const SizedBox(height: AppSpacing.xl),
                   SuggestedScheduleSection(
                     state: scheduleAsync,
                     onConfigure: () => _configureAvailability(context, ref),
                     onRequestCalendar: () =>
                         _requestCalendarAccess(context, ref, planningDate),
-                    onAccept: (proposal) =>
-                        _acceptProposal(context, ref, planningDate, proposal),
-                    onRemoveBlock: (block) =>
-                        _removeScheduleBlock(context, ref, planningDate, block),
+                    onAccept: (proposal) => _acceptProposal(
+                      context,
+                      ref,
+                      planningDate,
+                      proposal,
+                      replanningNow: replanningNow,
+                    ),
+                    onRemoveBlock: (block) => _removeScheduleBlock(
+                      context,
+                      ref,
+                      planningDate,
+                      block,
+                      replanningNow: replanningNow,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   SectionHeader(
@@ -259,8 +321,9 @@ class PlanScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     DateTime date,
-    ScheduleProposal proposal,
-  ) async {
+    ScheduleProposal proposal, {
+    DateTime? replanningNow,
+  }) async {
     final user = ref.read(firebaseAuthProvider).currentUser;
     if (user == null) {
       return;
@@ -270,6 +333,9 @@ class PlanScreen extends ConsumerWidget {
           .read(scheduleBlocksRepositoryProvider)
           .acceptProposal(userId: user.uid, proposal: proposal);
       ref.invalidate(schedulingDayProvider(date));
+      ref.invalidate(
+        adaptiveReplanningProvider(replanningNow ?? DateTime.now()),
+      );
     } catch (error) {
       if (!context.mounted) {
         return;
@@ -284,13 +350,17 @@ class PlanScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     DateTime date,
-    ScheduleBlock block,
-  ) async {
+    ScheduleBlock block, {
+    DateTime? replanningNow,
+  }) async {
     try {
       await ref
           .read(scheduleBlocksRepositoryProvider)
           .deleteBlock(block.userId, block.id);
       ref.invalidate(schedulingDayProvider(date));
+      ref.invalidate(
+        adaptiveReplanningProvider(replanningNow ?? DateTime.now()),
+      );
     } catch (error) {
       if (!context.mounted) {
         return;
@@ -299,6 +369,97 @@ class PlanScreen extends ConsumerWidget {
         SnackBar(content: Text('Could not remove planned block: $error')),
       );
     }
+  }
+
+  Future<void> _setScheduleBlockStatus(
+    BuildContext context,
+    WidgetRef ref,
+    DateTime replanningNow,
+    ScheduleBlock block,
+    ScheduleBlockStatus status,
+  ) async {
+    try {
+      await ref
+          .read(scheduleBlocksRepositoryProvider)
+          .updateStatus(block: block, status: status);
+      ref.invalidate(
+        schedulingDayProvider(
+          DateTime(replanningNow.year, replanningNow.month, replanningNow.day),
+        ),
+      );
+      ref.invalidate(adaptiveReplanningProvider(replanningNow));
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update planned block: $error')),
+      );
+    }
+  }
+
+  Future<void> _moveReplanningBlock(
+    BuildContext context,
+    WidgetRef ref,
+    DateTime replanningNow,
+    ReplanningIssue issue,
+  ) async {
+    final block = issue.block;
+    final suggestion = issue.suggestion;
+    if (block == null || suggestion == null) {
+      return;
+    }
+    try {
+      await ref
+          .read(scheduleBlocksRepositoryProvider)
+          .rescheduleBlock(
+            block: block,
+            startsAt: suggestion.startsAt,
+            endsAt: suggestion.endsAt,
+          );
+      ref.invalidate(adaptiveReplanningProvider(replanningNow));
+      ref.invalidate(
+        schedulingDayProvider(
+          DateTime(replanningNow.year, replanningNow.month, replanningNow.day),
+        ),
+      );
+      ref.invalidate(
+        schedulingDayProvider(
+          DateTime(
+            suggestion.startsAt.year,
+            suggestion.startsAt.month,
+            suggestion.startsAt.day,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not move planned block: $error')),
+      );
+    }
+  }
+
+  Future<void> _reviewTaskById(
+    BuildContext context,
+    WidgetRef ref,
+    String taskId,
+    List<Task> tasks,
+    List<Project> projects,
+  ) async {
+    Task? task;
+    for (final item in tasks) {
+      if (item.id == taskId) {
+        task = item;
+        break;
+      }
+    }
+    if (task == null) {
+      return;
+    }
+    await _editTask(context, ref, task, projects);
   }
 
   Future<void> _editTask(

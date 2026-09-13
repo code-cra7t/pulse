@@ -8,7 +8,9 @@ import '../../../core/widgets/pulse_components.dart';
 import '../../planning/presentation/widgets/task_planning_sheet.dart';
 import '../../planning/providers/planning_providers.dart';
 import '../../projects/models/project.dart';
+import '../../scheduling/models/replanning_overview.dart';
 import '../../scheduling/models/scheduling_day_state.dart';
+import '../../scheduling/providers/replanning_providers.dart';
 import '../../scheduling/providers/scheduling_providers.dart';
 import '../../projects/providers/project_providers.dart';
 import '../../tasks/models/task.dart';
@@ -35,6 +37,13 @@ class PulseScreen extends ConsumerWidget {
     final projects = projectsAsync.asData?.value ?? const <Project>[];
     final tasks = ref.watch(tasksProvider);
     final currentTime = now ?? DateTime.now();
+    final replanningNow = DateTime(
+      currentTime.year,
+      currentTime.month,
+      currentTime.day,
+      currentTime.hour,
+      currentTime.minute,
+    );
     final overview = PulseOverview.build(
       projects: projects,
       tasks: tasks,
@@ -46,6 +55,9 @@ class PulseScreen extends ConsumerWidget {
       currentTime.day,
     );
     final scheduleAsync = ref.watch(schedulingDayProvider(planningDate));
+    final replanningAsync = ref.watch(
+      adaptiveReplanningProvider(replanningNow),
+    );
     final usesBottomNavigation =
         MediaQuery.sizeOf(context).width < AdaptiveShell.tabletBreakpoint;
 
@@ -74,6 +86,10 @@ class PulseScreen extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.lg),
                   _DaySnapshot(overview: overview),
                   _PulseCapacity(state: scheduleAsync, onOpenPlan: onOpenPlan),
+                  _PulseReplanningNotice(
+                    state: replanningAsync,
+                    onOpenPlan: onOpenPlan,
+                  ),
                   if (projectsAsync.hasError) ...[
                     const SizedBox(height: AppSpacing.sm),
                     const _SyncNotice(),
@@ -314,7 +330,7 @@ class _PulseCapacity extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '${_formatMinutes(proposed)} suggested · ${_formatMinutes(accepted)} accepted'
+                    '${_formatMinutes(proposed)} suggested · ${_formatMinutes(accepted)} planned/done'
                     '${proposal != null && proposal.unscheduledTaskCount > 0 ? ' · ${proposal.unscheduledTaskCount} ${proposal.unscheduledTaskCount == 1 ? 'task' : 'tasks'} still do not fit' : ''}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
@@ -325,6 +341,59 @@ class _PulseCapacity extends StatelessWidget {
               IconButton(
                 onPressed: onOpenPlan,
                 tooltip: 'Open Plan',
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PulseReplanningNotice extends StatelessWidget {
+  const _PulseReplanningNotice({required this.state, required this.onOpenPlan});
+
+  final AsyncValue<ReplanningOverview> state;
+  final VoidCallback? onOpenPlan;
+
+  @override
+  Widget build(BuildContext context) {
+    final overview = state.asData?.value;
+    if (overview == null || !overview.needsAttention) {
+      return const SizedBox.shrink();
+    }
+
+    final count = overview.issues.length;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.sm),
+      child: AppCard(
+        color: AppColors.butter,
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.update_rounded, size: 20),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$count ${count == 1 ? 'schedule item needs' : 'schedule items need'} review',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'JotCue noticed a missed block, changed availability, calendar conflict, or deadline-capacity problem.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            if (onOpenPlan != null)
+              IconButton(
+                onPressed: onOpenPlan,
+                tooltip: 'Review in Plan',
                 icon: const Icon(Icons.chevron_right_rounded),
               ),
           ],

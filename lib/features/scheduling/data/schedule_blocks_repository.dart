@@ -16,6 +16,12 @@ abstract interface class ScheduleBlocksRepository {
     required ScheduleBlockStatus status,
   });
 
+  Future<ScheduleBlock> rescheduleBlock({
+    required ScheduleBlock block,
+    required DateTime startsAt,
+    required DateTime endsAt,
+  });
+
   Future<void> deleteBlock(String userId, String blockId);
 
   Future<void> clearUser(String userId);
