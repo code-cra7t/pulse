@@ -9,12 +9,14 @@ import '../../planning/presentation/widgets/task_planning_sheet.dart';
 import '../../planning/providers/planning_providers.dart';
 import '../../projects/models/project.dart';
 import '../../scheduling/models/replanning_overview.dart';
+import '../../scheduling/models/schedule_block.dart';
 import '../../scheduling/models/scheduling_day_state.dart';
 import '../../scheduling/providers/replanning_providers.dart';
 import '../../scheduling/providers/scheduling_providers.dart';
 import '../../projects/providers/project_providers.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/providers/task_providers.dart';
+import '../models/daily_pulse_loop.dart';
 import '../models/pulse_overview.dart';
 
 class PulseScreen extends ConsumerWidget {
@@ -58,6 +60,14 @@ class PulseScreen extends ConsumerWidget {
     final replanningAsync = ref.watch(
       adaptiveReplanningProvider(replanningNow),
     );
+    final scheduleBlocksAsync = ref.watch(scheduleBlocksStreamProvider);
+    final dailyLoop = DailyPulseLoop.build(
+      now: currentTime,
+      pulse: overview,
+      blocks: scheduleBlocksAsync.asData?.value ?? const <ScheduleBlock>[],
+      scheduling: scheduleAsync.asData?.value,
+      replanning: replanningAsync.asData?.value,
+    );
     final usesBottomNavigation =
         MediaQuery.sizeOf(context).width < AdaptiveShell.tabletBreakpoint;
 
@@ -84,7 +94,11 @@ class PulseScreen extends ConsumerWidget {
                     onOpenPlan: onOpenPlan,
                   ),
                   const SizedBox(height: AppSpacing.lg),
-                  _DaySnapshot(overview: overview),
+                  _DaySnapshot(
+                    overview: overview,
+                    loop: dailyLoop,
+                    now: currentTime,
+                  ),
                   _PulseCapacity(state: scheduleAsync, onOpenPlan: onOpenPlan),
                   _PulseReplanningNotice(
                     state: replanningAsync,
@@ -130,6 +144,29 @@ class PulseScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
+                  if (dailyLoop.shouldShowClosing) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    _DailyClosing(
+                      loop: dailyLoop,
+                      onOpenPlan: onOpenPlan,
+                      onMarkCompleted: (block) => _setScheduleBlockStatus(
+                        context,
+                        ref,
+                        replanningNow,
+                        planningDate,
+                        block,
+                        ScheduleBlockStatus.completed,
+                      ),
+                      onMarkMissed: (block) => _setScheduleBlockStatus(
+                        context,
+                        ref,
+                        replanningNow,
+                        planningDate,
+                        block,
+                        ScheduleBlockStatus.skipped,
+                      ),
+                    ),
+                  ],
                   if (overview.cues.isNotEmpty) ...[
                     const SizedBox(height: AppSpacing.lg),
                     const SectionHeader(
@@ -208,6 +245,30 @@ class PulseScreen extends ConsumerWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Could not update task: $error')));
+    }
+  }
+
+  Future<void> _setScheduleBlockStatus(
+    BuildContext context,
+    WidgetRef ref,
+    DateTime replanningNow,
+    DateTime planningDate,
+    ScheduleBlock block,
+    ScheduleBlockStatus status,
+  ) async {
+    try {
+      await ref
+          .read(scheduleBlocksRepositoryProvider)
+          .updateStatus(block: block, status: status);
+      ref.invalidate(schedulingDayProvider(planningDate));
+      ref.invalidate(adaptiveReplanningProvider(replanningNow));
+    } catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update planned block: $error')),
+      );
     }
   }
 }
@@ -404,9 +465,15 @@ class _PulseReplanningNotice extends StatelessWidget {
 }
 
 class _DaySnapshot extends StatelessWidget {
-  const _DaySnapshot({required this.overview});
+  const _DaySnapshot({
+    required this.overview,
+    required this.loop,
+    required this.now,
+  });
 
   final PulseOverview overview;
+  final DailyPulseLoop loop;
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
@@ -424,7 +491,7 @@ class _DaySnapshot extends StatelessWidget {
               const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Text(
-                  'Your day at a glance',
+                  now.hour < 12 ? 'Morning Pulse' : "Today's Pulse",
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium,
@@ -432,6 +499,15 @@ class _DaySnapshot extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 3),
+          Text(
+            'Your day at a glance',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          if (loop.upNextBlock != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _UpNextLine(block: loop.upNextBlock!, now: now),
+          ],
           const SizedBox(height: AppSpacing.md),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -470,6 +546,231 @@ class _DaySnapshot extends StatelessWidget {
       ),
     );
   }
+}
+
+class _UpNextLine extends StatelessWidget {
+  const _UpNextLine({required this.block, required this.now});
+
+  final ScheduleBlock block;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = !block.startsAt.isAfter(now) && block.endsAt.isAfter(now);
+    final label = isActive ? 'Now' : 'Up next';
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isActive
+                ? Icons.play_circle_outline_rounded
+                : Icons.schedule_rounded,
+            size: 18,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              '$label · ${_formatClock(context, block.startsAt)} · ${block.title}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DailyClosing extends StatelessWidget {
+  const _DailyClosing({
+    required this.loop,
+    required this.onOpenPlan,
+    required this.onMarkCompleted,
+    required this.onMarkMissed,
+  });
+
+  final DailyPulseLoop loop;
+  final VoidCallback? onOpenPlan;
+  final ValueChanged<ScheduleBlock> onMarkCompleted;
+  final ValueChanged<ScheduleBlock> onMarkMissed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      key: const ValueKey('daily-closing-section'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          title: 'Daily Closing',
+          subtitle: 'Close the loop on today before tomorrow inherits it.',
+          trailing: onOpenPlan == null
+              ? null
+              : TextButton(onPressed: onOpenPlan, child: const Text('Plan')),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        AppCard(
+          color: AppColors.mint,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final metrics = <Widget>[
+                    _SnapshotMetric(
+                      value: '${loop.completedCount}',
+                      label: 'Completed',
+                    ),
+                    _SnapshotMetric(
+                      value: '${loop.missedCount}',
+                      label: 'Missed',
+                    ),
+                    _SnapshotMetric(
+                      value: '${loop.unresolvedCount}',
+                      label: 'Review',
+                    ),
+                    _SnapshotMetric(
+                      value: _formatMinutes(loop.completedMinutes),
+                      label: 'Done time',
+                    ),
+                  ];
+                  if (constraints.maxWidth >= 600) {
+                    return Row(
+                      children: [
+                        for (
+                          var index = 0;
+                          index < metrics.length;
+                          index++
+                        ) ...[
+                          Expanded(child: metrics[index]),
+                          if (index != metrics.length - 1)
+                            const SizedBox(width: AppSpacing.sm),
+                        ],
+                      ],
+                    );
+                  }
+                  return Wrap(
+                    spacing: AppSpacing.lg,
+                    runSpacing: AppSpacing.md,
+                    children: metrics
+                        .map((metric) => SizedBox(width: 94, child: metric))
+                        .toList(growable: false),
+                  );
+                },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                _closingMessage(loop),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              if (loop.unresolvedPastBlocks.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.md),
+                ...loop.unresolvedPastBlocks
+                    .take(3)
+                    .map(
+                      (block) => Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                        child: _ClosingBlockRow(
+                          block: block,
+                          onCompleted: () => onMarkCompleted(block),
+                          onMissed: () => onMarkMissed(block),
+                        ),
+                      ),
+                    ),
+                if (loop.unresolvedPastBlocks.length > 3 && onOpenPlan != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: onOpenPlan,
+                      child: Text(
+                        'Review ${loop.unresolvedPastBlocks.length - 3} more in Plan',
+                      ),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ClosingBlockRow extends StatelessWidget {
+  const _ClosingBlockRow({
+    required this.block,
+    required this.onCompleted,
+    required this.onMissed,
+  });
+
+  final ScheduleBlock block;
+  final VoidCallback onCompleted;
+  final VoidCallback onMissed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(AppRadii.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            block.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 3),
+          Text(
+            '${_formatClock(context, block.startsAt)}–${_formatClock(context, block.endsAt)} · ${_formatMinutes(block.duration.inMinutes)}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
+            children: [
+              FilledButton.tonal(
+                onPressed: onCompleted,
+                child: const Text('Completed'),
+              ),
+              TextButton(onPressed: onMissed, child: const Text('Missed')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _closingMessage(DailyPulseLoop loop) {
+  if (loop.todayBlocks.isEmpty) {
+    return 'Nothing was planned in JotCue today. You can still review open work in Plan before calling it a day.';
+  }
+  if (loop.unresolvedCount > 0) {
+    return '${loop.unresolvedCount} ${loop.unresolvedCount == 1 ? 'past block still needs' : 'past blocks still need'} a decision. Mark the work completed or missed; move it from Plan if it still belongs later.';
+  }
+  if (loop.upcomingCount > 0) {
+    return '${loop.upcomingCount} ${loop.upcomingCount == 1 ? 'planned block remains' : 'planned blocks remain'} today. Completed work already counts toward future scheduling.';
+  }
+  if (loop.completedCount > 0 && loop.missedCount == 0) {
+    return 'Everything you planned in JotCue today has been closed out.';
+  }
+  return 'Today is accounted for. Review tomorrow in Plan if anything needs a new home.';
 }
 
 class _SnapshotMetric extends StatelessWidget {
@@ -786,6 +1087,10 @@ String _month(int month) {
 
 String _shortDate(DateTime date) {
   return '${_month(date.month).substring(0, 3)} ${date.day}';
+}
+
+String _formatClock(BuildContext context, DateTime value) {
+  return TimeOfDay.fromDateTime(value).format(context);
 }
 
 String _formatMinutes(int minutes) {

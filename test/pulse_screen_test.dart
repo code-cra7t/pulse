@@ -83,6 +83,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Good morning, Tori'), findsOneWidget);
+    expect(find.text('Morning Pulse'), findsOneWidget);
     expect(find.text('Your day at a glance'), findsOneWidget);
     expect(find.text('Revise chapter 4'), findsOneWidget);
     expect(find.text('Send application'), findsOneWidget);
@@ -131,6 +132,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('Good evening'), findsOneWidget);
+    expect(find.text("Today's Pulse"), findsOneWidget);
+    expect(find.text('Daily Closing'), findsOneWidget);
     expect(find.text('Your focus is clear'), findsOneWidget);
     expect(
       find.text('Nothing is asking for your attention right now.'),
@@ -191,7 +194,63 @@ void main() {
     await tester.pump();
 
     expect(find.text('Good morning, Tori'), findsOneWidget);
+    expect(find.text('Morning Pulse'), findsOneWidget);
     expect(find.textContaining('A long task title'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'Daily Closing reviews unresolved planned work on narrow phones',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final pastBlock = ScheduleBlock(
+        id: 'past-block',
+        userId: 'user',
+        taskId: 'task-past',
+        title:
+            'A long planned work block that needs an explicit closing decision',
+        startsAt: DateTime(2026, 9, 13, 16),
+        endsAt: DateTime(2026, 9, 13, 17),
+        createdAt: DateTime(2026, 9, 12),
+        updatedAt: DateTime(2026, 9, 12),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            projectsStreamProvider.overrideWith(
+              (ref) => Stream.value(const <Project>[]),
+            ),
+            tasksProvider.overrideWith((ref) => const <Task>[]),
+            currentUserSettingsProvider.overrideWith(
+              (ref) => Stream.value(UserSettings.defaults()),
+            ),
+            scheduleBlocksStreamProvider.overrideWith(
+              (ref) => Stream.value([pastBlock]),
+            ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.build(),
+            home: Scaffold(body: PulseScreen(now: DateTime(2026, 9, 13, 19))),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.drag(
+        find.byKey(const ValueKey('pulse-screen-scroll')),
+        const Offset(0, -650),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Daily Closing'), findsOneWidget);
+      expect(find.textContaining('A long planned work block'), findsOneWidget);
+      expect(find.text('Completed'), findsWidgets);
+      expect(find.text('Missed'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
