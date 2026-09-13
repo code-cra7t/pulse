@@ -5,6 +5,7 @@ import '../../../core/models/priority_level.dart';
 import '../../../core/services/app_theme.dart';
 import '../../../core/widgets/adaptive_shell.dart';
 import '../../../core/widgets/pulse_components.dart';
+import '../../capture/presentation/natural_language_capture_sheet.dart';
 import '../../planning/presentation/widgets/task_planning_sheet.dart';
 import '../../planning/providers/planning_providers.dart';
 import '../../projects/models/project.dart';
@@ -91,6 +92,8 @@ class PulseScreen extends ConsumerWidget {
                   _PulseHeader(
                     now: currentTime,
                     displayName: displayName,
+                    onCapture: () =>
+                        showNaturalLanguageCaptureSheet(context: context),
                     onOpenPlan: onOpenPlan,
                   ),
                   const SizedBox(height: AppSpacing.lg),
@@ -277,11 +280,13 @@ class _PulseHeader extends StatelessWidget {
   const _PulseHeader({
     required this.now,
     required this.displayName,
+    required this.onCapture,
     required this.onOpenPlan,
   });
 
   final DateTime now;
   final String? displayName;
+  final VoidCallback onCapture;
   final VoidCallback? onOpenPlan;
 
   @override
@@ -310,8 +315,15 @@ class _PulseHeader extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(width: AppSpacing.xs),
+        IconButton.filledTonal(
+          key: const ValueKey('pulse-quick-capture'),
+          onPressed: onCapture,
+          tooltip: 'Quick capture',
+          icon: const Icon(Icons.add_task_rounded),
+        ),
         if (onOpenPlan != null) ...[
-          const SizedBox(width: AppSpacing.sm),
+          const SizedBox(width: AppSpacing.xs),
           IconButton.filledTonal(
             onPressed: onOpenPlan,
             tooltip: 'Open Plan',
