@@ -5,6 +5,8 @@ import '../../../core/services/app_theme.dart';
 import '../../../core/services/firebase_providers.dart';
 import '../../../core/widgets/jotcue_brand.dart';
 import '../../../core/widgets/pulse_components.dart';
+import '../../automation/models/automation_preferences.dart';
+import '../../automation/presentation/automation_preferences_sheet.dart';
 import '../../auth/providers/account_deletion_provider.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../notes/models/note_category.dart';
@@ -227,6 +229,28 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _SettingsSection(
+                    title: 'Assistant',
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.auto_awesome_outlined),
+                        title: const Text('Assistant permissions'),
+                        subtitle: Text(
+                          _automationLevelLabel(
+                            effectiveSettings.automationPreferences.level,
+                          ),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => _editAutomationPreferences(
+                          context,
+                          ref,
+                          user.uid,
+                          effectiveSettings,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _SettingsSection(
                     title: 'Reminders',
                     children: [
                       SwitchListTile(
@@ -295,12 +319,43 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
+  Future<void> _editAutomationPreferences(
+    BuildContext context,
+    WidgetRef ref,
+    String userId,
+    UserSettings settings,
+  ) async {
+    final updated = await showAutomationPreferencesSheet(
+      context: context,
+      initial: settings.automationPreferences,
+    );
+    if (updated == null || !context.mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(userSettingsRepositoryProvider)
+          .updateAutomationPreferences(userId, updated);
+    } catch (error) {
+      _showError(messenger, error);
+    }
+  }
+
   void _showError(ScaffoldMessengerState messenger, Object error) {
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text('Settings save failed: $error')));
   }
 }
+
+String _automationLevelLabel(AutomationLevel level) => switch (level) {
+  AutomationLevel.observe => 'Observe only',
+  AutomationLevel.suggest => 'Suggest changes',
+  AutomationLevel.approval => 'Act with approval',
+  AutomationLevel.trusted => 'Trusted permissions',
+};
 
 class _DeleteAccountDialog extends ConsumerStatefulWidget {
   const _DeleteAccountDialog();

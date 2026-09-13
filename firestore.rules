@@ -77,6 +77,13 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function validAutomationPreferences(value) {
+      return value is map
+        && value.keys().hasAll(['level'])
+        && value.keys().hasOnly(['level'])
+        && value.level in ['observe', 'suggest', 'approval', 'trusted'];
+    }
+
     function validSettings(data) {
       return data.keys().hasAll([
           'themeMode', 'defaultNoteTag', 'notificationsEnabled',
@@ -84,12 +91,14 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'themeMode', 'defaultNoteTag', 'notificationsEnabled',
-          'smartRemindersEnabled', 'updatedAt'
+          'smartRemindersEnabled', 'automation', 'updatedAt'
         ])
         && data.themeMode in ['system', 'light', 'dark']
         && data.defaultNoteTag is string
         && data.notificationsEnabled is bool
         && data.smartRemindersEnabled is bool
+        && (!data.keys().hasAny(['automation'])
+          || validAutomationPreferences(data.automation))
         && data.updatedAt is timestamp;
     }
 

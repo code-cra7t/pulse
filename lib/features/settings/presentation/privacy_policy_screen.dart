@@ -30,6 +30,11 @@ class PrivacyPolicyScreen extends StatelessWidget {
                     'This information is used only to provide account access, synchronize your content, show reminders, save your preferences, and support the features you request. JotCue does not sell personal information and does not include advertising SDKs.',
               ),
               _PolicySection(
+                title: 'Assistant permissions and automation',
+                body:
+                    'JotCue lets you choose how far the assistant may go when it notices something that could be adjusted: Observe, Suggest, Act with approval, or Trusted. This preference is stored with your app settings. Trusted is a permission boundary, not unlimited control. Calendar writes, creating structured content from capture, and deciding whether work was completed or missed remain approval-only. This version does not add background automation; future automation features must respect the stored permission policy before they can act.',
+              ),
+              _PolicySection(
                 title: 'Service providers and security',
                 body:
                     'JotCue uses Google Firebase for authentication, database storage, and uploaded-file storage. Data is encrypted in transit. Access controls limit cloud content to the signed-in account.',

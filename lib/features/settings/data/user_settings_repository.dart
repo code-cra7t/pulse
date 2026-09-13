@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../automation/models/automation_preferences.dart';
 import '../models/user_settings.dart';
 
 class UserSettingsRepository {
@@ -45,6 +46,13 @@ class UserSettingsRepository {
 
   Future<void> updateSmartRemindersEnabled(String uid, bool enabled) {
     return _update(uid, {'smartRemindersEnabled': enabled});
+  }
+
+  Future<void> updateAutomationPreferences(
+    String uid,
+    AutomationPreferences preferences,
+  ) {
+    return _update(uid, {'automation': preferences.toMap()});
   }
 
   Future<void> _update(String uid, Map<String, Object?> values) {
