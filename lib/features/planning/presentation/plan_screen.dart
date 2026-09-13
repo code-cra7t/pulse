@@ -7,6 +7,11 @@ import '../../../core/services/app_theme.dart';
 import '../../../core/services/firebase_providers.dart';
 import '../../../core/widgets/adaptive_shell.dart';
 import '../../../core/widgets/pulse_components.dart';
+import '../../automation/models/automation_audit_entry.dart';
+import '../../automation/models/automation_preferences.dart';
+import '../../automation/presentation/automation_activity_section.dart';
+import '../../automation/providers/automation_providers.dart';
+import '../../automation/providers/trusted_automation_providers.dart';
 import '../../calendar/providers/calendar_providers.dart';
 import '../../projects/models/project.dart';
 import '../../scheduling/models/schedule_block.dart';
@@ -62,6 +67,45 @@ class PlanScreen extends ConsumerWidget {
     final replanningAsync = ref.watch(
       adaptiveReplanningProvider(replanningNow),
     );
+    final automationPreferences = ref.watch(automationPreferencesProvider);
+    final automationActivity =
+        automationPreferences.level == AutomationLevel.trusted
+        ? ref.watch(automationAuditStreamProvider)
+        : const AsyncData<List<AutomationAuditEntry>>([]);
+    final trustedSweepProvider = trustedAutomationSweepProvider(replanningNow);
+    ref.listen<AsyncValue<AutomationAuditEntry?>>(trustedSweepProvider, (
+      previous,
+      next,
+    ) {
+      final entry = next.asData?.value;
+      if (entry == null || previous?.asData?.value?.id == entry.id) {
+        return;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) {
+          return;
+        }
+        ref.invalidate(adaptiveReplanningProvider(replanningNow));
+        ref.invalidate(schedulingDayProvider(planningDate));
+        ref.invalidate(
+          schedulingDayProvider(
+            DateTime(
+              entry.toStartsAt.year,
+              entry.toStartsAt.month,
+              entry.toStartsAt.day,
+            ),
+          ),
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Trusted JotCue moved “${entry.title}” locally and recorded the change.',
+            ),
+          ),
+        );
+      });
+    });
+    ref.watch(trustedSweepProvider);
 
     final usesBottomNavigation =
         MediaQuery.sizeOf(context).width < AdaptiveShell.tabletBreakpoint;
@@ -134,6 +178,11 @@ class PlanScreen extends ConsumerWidget {
                     ),
                   ),
                   if (replanningAsync.asData?.value.needsAttention == true)
+                    const SizedBox(height: AppSpacing.xl),
+                  AutomationActivitySection(state: automationActivity),
+                  if ((automationActivity.asData?.value ??
+                          const <AutomationAuditEntry>[])
+                      .isNotEmpty)
                     const SizedBox(height: AppSpacing.xl),
                   SuggestedScheduleSection(
                     state: scheduleAsync,

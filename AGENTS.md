@@ -48,7 +48,7 @@ Calendar / availability rules:
 - Schedule-block calendar links must remain separate from reminder calendar links and may only own events created for that exact JotCue block.
 - Rescheduling a linked block must not silently update the external calendar; offer an explicit update choice.
 - Accepted JotCue schedule blocks are device-local until cross-device scheduling conflict semantics are designed.
-- Adaptive replanning is advisory: never silently mark a block completed/missed, move a block, or displace work. Every mutation requires an explicit user action.
+- Adaptive replanning is advisory by default. Never silently mark a block completed/missed. Trusted execution may move only one future flexible device-local proposal block at a time while Plan is open, only after the stored automation policy returns trustedEligible, only when the block is not linked to an external calendar, and only from a fresh deterministic suggestion. Recompute before any next move.
 - Non-flexible tasks may be flagged when their accepted block conflicts, but JotCue must not offer an automatic move suggestion for them.
 - Scheduling preferences may sync through the existing user settings document, but calendar event contents must remain local/in-memory.
 
@@ -58,3 +58,10 @@ External-context rules:
 - Keep share ingestion local and transient until the user confirms a save/create action. Do not upload shared content merely because another app sent it to JotCue.
 - Reuse the existing Quick Capture parser/service rather than creating a second task/project source of truth.
 - External API integrations (Gmail, Google Calendar cloud APIs, etc.) require separate privacy/scoping work and must not be smuggled into share-intent patches.
+
+Trusted automation rules:
+- Trusted execution is foreground-only in this version; do not add background workers or timers.
+- Only AutomationActionKind.localScheduleMove is trusted-eligible. External calendar writes, work review decisions, and structured capture creation always require approval.
+- Trusted moves must fail closed when calendar-link state cannot be verified, when the source block is stale, when the task is missing/non-flexible/completed, or when the block was user-created.
+- Execute at most one move per replanning snapshot, then recompute availability/replanning before considering another.
+- Every successful trusted move must be appended to the device-local automation audit store. Do not upload the audit trail unless a later privacy-reviewed design explicitly introduces sync.

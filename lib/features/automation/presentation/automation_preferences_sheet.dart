@@ -84,7 +84,7 @@ class _AutomationPreferencesSheetState
             child: const Padding(
               padding: EdgeInsets.all(AppSpacing.md),
               child: Text(
-                'Safety boundary: calendar writes, creating captured content, and deciding whether work was completed or missed always require your approval. Patch 15 stores the permission policy; it does not add background automation.',
+                'Safety boundary: calendar writes, creating captured content, and deciding whether work was completed or missed always require your approval. Trusted may move only future flexible JotCue proposal blocks while Plan is open, never linked calendar copies. Every trusted move is recorded locally on this device.',
               ),
             ),
           ),
@@ -119,5 +119,5 @@ String _description(AutomationLevel level) => switch (level) {
   AutomationLevel.approval =>
     'JotCue may prepare a concrete change, but must ask before applying it.',
   AutomationLevel.trusted =>
-    'Allow future low-risk local automation only where JotCue explicitly supports trusted execution.',
+    'Allow supported low-risk local schedule moves while Plan is open. Calendar-linked blocks and sensitive decisions still require approval.',
 };

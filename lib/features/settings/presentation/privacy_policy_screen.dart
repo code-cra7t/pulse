@@ -32,7 +32,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
               _PolicySection(
                 title: 'Assistant permissions and automation',
                 body:
-                    'JotCue lets you choose how far the assistant may go when it notices something that could be adjusted: Observe, Suggest, Act with approval, or Trusted. This preference is stored with your app settings. Trusted is a permission boundary, not unlimited control. Calendar writes, creating structured content from capture, and deciding whether work was completed or missed remain approval-only. This version does not add background automation; future automation features must respect the stored permission policy before they can act.',
+                    'JotCue lets you choose how far the assistant may go when it notices something that could be adjusted: Observe, Suggest, Act with approval, or Trusted. This preference is stored with your app settings. Trusted is a permission boundary, not unlimited control. In this version, Trusted may move one future flexible device-local JotCue proposal block at a time while Plan is open, then recalculates before considering another move. Linked calendar copies, calendar writes, creating structured content from capture, and deciding whether work was completed or missed remain approval-only. Successful trusted moves are recorded in a device-local automation activity log and are cleared with local account data during account deletion. No background automation is added.',
               ),
               _PolicySection(
                 title: 'Service providers and security',
