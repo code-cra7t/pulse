@@ -75,6 +75,25 @@ class TaskMetadataEditor {
       next = next.copyWith(isFlexible: update.isFlexible);
     }
 
+    if (update.dependsOnTaskIds != null) {
+      final seen = <String>{};
+      final dependencies = <String>[];
+      for (final raw in update.dependsOnTaskIds!) {
+        final normalized = raw.trim();
+        if (normalized.isNotEmpty && seen.add(normalized)) {
+          dependencies.add(normalized);
+        }
+      }
+      next = next.copyWith(dependsOnTaskIds: dependencies);
+    }
+
+    if (update.clearWaitingFor) {
+      next = next.copyWith(waitingFor: null);
+    } else if (update.waitingFor != null) {
+      final normalized = update.waitingFor!.trim();
+      next = next.copyWith(waitingFor: normalized.isEmpty ? null : normalized);
+    }
+
     return next;
   }
 }

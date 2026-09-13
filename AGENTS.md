@@ -91,3 +91,12 @@ Trusted automation rules:
 - Broken references must fail visibly as integrity issues; never invent missing Notes, Projects, Tasks, or schedule relationships.
 - Reserved graph node types such as person, decision, and event are schema placeholders only until a later reviewed extraction/design patch populates them.
 - Relationship UI must remain secondary to the existing Notes/Plan experience and must not redesign Notes.
+
+## Patch 20 dependency and action-cue guardrails
+- Task dependencies must be explicit stable Task IDs stored in Note task identity metadata; never infer or silently create them from Note prose.
+- Reject self-dependencies, missing prerequisites on new saves, and dependency cycles before mutating the source Note.
+- `waitingFor` is human-authored external-blocker text. JotCue must never mark it resolved automatically; only the user clears or edits it.
+- Completed prerequisites satisfy a dependency. Missing or cyclic prerequisites fail closed as blocked/integrity problems.
+- Blocked Tasks must not enter Pulse focus, new deterministic scheduling proposals, or Trusted local schedule moves. Existing accepted schedule blocks remain user-visible and are not silently deleted.
+- Personal Graph dependency edges are derived read-only relationships; Notes/Task identity metadata remain authoritative.
+- Keep dependency metadata backward-compatible: absent fields deserialize to no dependencies/no waiting blocker. Do not change visible Note text.

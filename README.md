@@ -97,3 +97,6 @@ JotCue can schedule device-local Morning Pulse and Daily Closing cues, resurface
 
 ### Personal Graph Foundation (Patch 19)
 JotCue now derives an on-device Personal Graph from existing Notes, stable Tasks, Projects, task/project deadlines, and accepted schedule blocks. The graph is a read model only: those existing objects remain the sources of truth, and no separate graph dataset is uploaded or synchronized. Task planning can surface graph-derived related context, while dangling references are exposed as integrity issues rather than silently fabricated.
+
+### Dependencies and action cues (Patch 20)
+Tasks can explicitly depend on other stable JotCue Tasks or carry a human-authored "Waiting for" blocker. JotCue derives blocked/ready state, Project next actions, Personal Graph dependency edges, and scheduling eligibility from that metadata. Dependencies are never inferred from note prose, cycles/self-dependencies are rejected before save, and blocked Tasks are excluded from Pulse focus, new schedule proposals, and Trusted schedule moves until their blockers clear.

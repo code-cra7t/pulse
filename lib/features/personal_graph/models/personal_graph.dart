@@ -14,12 +14,14 @@ enum PersonalGraphEdgeType {
   belongsToProject,
   hasDeadline,
   scheduledAs,
+  dependsOnTask,
 }
 
 enum PersonalGraphIntegrityIssueType {
   missingSourceNote,
   missingProject,
   missingTaskForScheduleBlock,
+  missingDependencyTask,
 }
 
 class PersonalGraphNode {
@@ -77,6 +79,7 @@ class PersonalGraphTaskContext {
     this.project,
     this.deadline,
     this.scheduleBlocks = const <PersonalGraphNode>[],
+    this.prerequisiteTasks = const <PersonalGraphNode>[],
     this.integrityIssues = const <PersonalGraphIntegrityIssue>[],
   });
 
@@ -85,6 +88,7 @@ class PersonalGraphTaskContext {
   final PersonalGraphNode? project;
   final PersonalGraphNode? deadline;
   final List<PersonalGraphNode> scheduleBlocks;
+  final List<PersonalGraphNode> prerequisiteTasks;
   final List<PersonalGraphIntegrityIssue> integrityIssues;
 
   bool get hasRelatedContext =>
@@ -92,6 +96,7 @@ class PersonalGraphTaskContext {
       project != null ||
       deadline != null ||
       scheduleBlocks.isNotEmpty ||
+      prerequisiteTasks.isNotEmpty ||
       integrityIssues.isNotEmpty;
 
   PersonalGraphNode? nextScheduleBlock(DateTime now) {
@@ -177,6 +182,12 @@ class PersonalGraph {
             return aStart.compareTo(bStart);
           });
 
+    final prerequisiteNodes =
+        outgoing(taskNode.id, type: PersonalGraphEdgeType.dependsOnTask)
+            .map((edge) => nodes[edge.toNodeId])
+            .whereType<PersonalGraphNode>()
+            .toList(growable: false);
+
     final taskIssues = integrityIssues
         .where((issue) => issue.entityId == taskId)
         .toList(growable: false);
@@ -187,6 +198,7 @@ class PersonalGraph {
       project: target(PersonalGraphEdgeType.belongsToProject),
       deadline: target(PersonalGraphEdgeType.hasDeadline),
       scheduleBlocks: scheduleNodes,
+      prerequisiteTasks: prerequisiteNodes,
       integrityIssues: taskIssues,
     );
   }

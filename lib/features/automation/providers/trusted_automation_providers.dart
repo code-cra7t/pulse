@@ -108,7 +108,7 @@ final trustedAutomationSweepProvider =
         return null;
       }
       final overview = await ref.watch(adaptiveReplanningProvider(now).future);
-      final tasks = ref.watch(tasksProvider);
+      final tasks = ref.watch(actionableTasksProvider);
       return ref
           .watch(trustedScheduleExecutorProvider)
           .executeNext(

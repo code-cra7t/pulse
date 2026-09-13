@@ -1,6 +1,8 @@
 import '../../notes/data/notes_service.dart';
 import '../models/task_metadata_update.dart';
+import 'task_dependency_analyzer.dart';
 import 'task_metadata_editor.dart';
+import 'task_projector.dart';
 
 class TaskService {
   TaskService(this._notesService);
@@ -23,6 +25,31 @@ class TaskService {
       taskId: taskId,
       update: update,
     );
+
+    if (update.dependsOnTaskIds != null) {
+      final notes = await _notesService.readLocalNotes(userId);
+      final proposedNotes = [
+        for (final item in notes) item.id == noteId ? updatedNote : item,
+      ];
+      final proposedTasks = TaskProjector.fromNotes(proposedNotes);
+      final knownTaskIds = proposedTasks.map((task) => task.id).toSet();
+      final requestedDependencies = update.dependsOnTaskIds!
+          .map((id) => id.trim())
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      if (requestedDependencies.contains(taskId)) {
+        throw StateError('A task cannot depend on itself.');
+      }
+      final missing = requestedDependencies.difference(knownTaskIds);
+      if (missing.isNotEmpty) {
+        throw StateError('One or more prerequisite tasks no longer exist.');
+      }
+      final analysis = const TaskDependencyAnalyzer().analyze(proposedTasks);
+      if (analysis.cycleTaskIds.isNotEmpty) {
+        throw StateError('Task dependencies cannot form a cycle.');
+      }
+    }
+
     await _notesService.updateNote(updatedNote);
   }
 

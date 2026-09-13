@@ -13,6 +13,8 @@ class Task {
     this.priority = PriorityLevel.none,
     this.estimatedMinutes,
     this.isFlexible = true,
+    this.dependsOnTaskIds = const <String>[],
+    this.waitingFor,
   });
 
   final String id;
@@ -26,6 +28,8 @@ class Task {
   final PriorityLevel priority;
   final int? estimatedMinutes;
   final bool isFlexible;
+  final List<String> dependsOnTaskIds;
+  final String? waitingFor;
 
   bool get isOverdue {
     final due = dueAt;
@@ -44,6 +48,8 @@ class Task {
     PriorityLevel? priority,
     Object? estimatedMinutes = _unchanged,
     bool? isFlexible,
+    List<String>? dependsOnTaskIds,
+    Object? waitingFor = _unchanged,
   }) {
     return Task(
       id: id ?? this.id,
@@ -61,6 +67,10 @@ class Task {
           ? this.estimatedMinutes
           : estimatedMinutes as int?,
       isFlexible: isFlexible ?? this.isFlexible,
+      dependsOnTaskIds: dependsOnTaskIds ?? this.dependsOnTaskIds,
+      waitingFor: identical(waitingFor, _unchanged)
+          ? this.waitingFor
+          : waitingFor as String?,
     );
   }
 }

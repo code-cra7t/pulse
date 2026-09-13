@@ -10,6 +10,8 @@ class NoteTaskIdentity {
     this.priority = PriorityLevel.none,
     this.estimatedMinutes,
     this.isFlexible = true,
+    this.dependsOnTaskIds = const <String>[],
+    this.waitingFor,
   });
 
   final String id;
@@ -20,6 +22,8 @@ class NoteTaskIdentity {
   final PriorityLevel priority;
   final int? estimatedMinutes;
   final bool isFlexible;
+  final List<String> dependsOnTaskIds;
+  final String? waitingFor;
 
   String get normalizedText => normalizeTaskIdentityText(text);
 
@@ -37,6 +41,8 @@ class NoteTaskIdentity {
       priority: PriorityLevel.fromValue(data['priority'] as String?),
       estimatedMinutes: data['estimatedMinutes'] as int?,
       isFlexible: data['isFlexible'] as bool? ?? true,
+      dependsOnTaskIds: _stringList(data['dependsOnTaskIds']),
+      waitingFor: _normalizedNullableString(data['waitingFor']),
     );
   }
 
@@ -50,6 +56,8 @@ class NoteTaskIdentity {
       'priority': priority.name,
       'estimatedMinutes': estimatedMinutes,
       'isFlexible': isFlexible,
+      'dependsOnTaskIds': dependsOnTaskIds,
+      'waitingFor': waitingFor,
     };
   }
 
@@ -62,6 +70,8 @@ class NoteTaskIdentity {
     PriorityLevel? priority,
     Object? estimatedMinutes = _unchanged,
     bool? isFlexible,
+    List<String>? dependsOnTaskIds,
+    Object? waitingFor = _unchanged,
   }) {
     return NoteTaskIdentity(
       id: id ?? this.id,
@@ -76,12 +86,32 @@ class NoteTaskIdentity {
           ? this.estimatedMinutes
           : estimatedMinutes as int?,
       isFlexible: isFlexible ?? this.isFlexible,
+      dependsOnTaskIds: dependsOnTaskIds ?? this.dependsOnTaskIds,
+      waitingFor: identical(waitingFor, _unchanged)
+          ? this.waitingFor
+          : waitingFor as String?,
     );
   }
 }
 
 String normalizeTaskIdentityText(String value) {
   return value.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+}
+
+List<String> _stringList(Object? value) {
+  if (value is! Iterable) return const <String>[];
+  final seen = <String>{};
+  final result = <String>[];
+  for (final item in value) {
+    final normalized = item.toString().trim();
+    if (normalized.isNotEmpty && seen.add(normalized)) result.add(normalized);
+  }
+  return result;
+}
+
+String? _normalizedNullableString(Object? value) {
+  final normalized = value?.toString().trim() ?? '';
+  return normalized.isEmpty ? null : normalized;
 }
 
 DateTime? _dateFromMilliseconds(Object? value) {

@@ -30,6 +30,7 @@ import '../../settings/models/user_settings.dart';
 import '../../settings/providers/user_settings_providers.dart';
 import '../../projects/providers/project_providers.dart';
 import '../../tasks/models/task.dart';
+import '../../tasks/models/task_action_cue.dart';
 import '../../tasks/providers/task_providers.dart';
 import '../models/plan_overview.dart';
 import '../providers/planning_providers.dart';
@@ -49,6 +50,7 @@ class PlanScreen extends ConsumerWidget {
     final projectsAsync = ref.watch(projectsStreamProvider);
     final projects = projectsAsync.asData?.value ?? const <Project>[];
     final tasks = ref.watch(tasksProvider);
+    final dependencyAnalysis = ref.watch(taskDependencyAnalysisProvider);
     final currentTime = now ?? DateTime.now();
     final replanningNow = DateTime(
       currentTime.year,
@@ -283,6 +285,9 @@ class PlanScreen extends ConsumerWidget {
                         child: _ProjectCard(
                           project: project,
                           overview: overview,
+                          actionCue: dependencyAnalysis.cueForProject(
+                            project.id,
+                          ),
                           onTap: () => _editProject(context, ref, project),
                         ),
                       ),
@@ -314,6 +319,7 @@ class PlanScreen extends ConsumerWidget {
                               task: task,
                               projects: overview.projects,
                               now: currentTime,
+                              actionCue: dependencyAnalysis.cueForTask(task.id),
                               onTap: () => _editTask(
                                 context,
                                 ref,
@@ -961,6 +967,8 @@ class PlanScreen extends ConsumerWidget {
       task: task,
       projects: projects,
       relatedContext: ref.read(taskGraphContextProvider(task.id)),
+      availableTasks: ref.read(tasksProvider),
+      actionCue: ref.read(taskActionCueProvider(task.id)),
     );
     if (update == null || !context.mounted) {
       return;
@@ -1224,7 +1232,15 @@ class _SummaryCard extends StatelessWidget {
               children: [
                 Text(value, style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 2),
-                Text(label, style: Theme.of(context).textTheme.bodySmall),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 240),
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1238,11 +1254,13 @@ class _ProjectCard extends StatelessWidget {
   const _ProjectCard({
     required this.project,
     required this.overview,
+    required this.actionCue,
     required this.onTap,
   });
 
   final Project project;
   final PlanOverview overview;
+  final ProjectActionCue? actionCue;
   final VoidCallback onTap;
 
   @override
@@ -1305,6 +1323,19 @@ class _ProjectCard extends StatelessWidget {
                 ),
             ],
           ),
+          if (actionCue?.nextTask != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _MetaLabel(
+              icon: Icons.play_arrow_rounded,
+              label: 'Next: ${actionCue!.nextTask!.title}',
+            ),
+          ] else if ((actionCue?.blockedCount ?? 0) > 0) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _MetaLabel(
+              icon: Icons.block_rounded,
+              label: '${actionCue!.blockedCount} blocked',
+            ),
+          ],
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [
@@ -1341,12 +1372,14 @@ class _TaskRow extends StatelessWidget {
     required this.task,
     required this.projects,
     required this.now,
+    required this.actionCue,
     required this.onTap,
   });
 
   final Task task;
   final List<Project> projects;
   final DateTime now;
+  final TaskActionCue? actionCue;
   final VoidCallback onTap;
 
   @override
@@ -1392,6 +1425,18 @@ class _TaskRow extends StatelessWidget {
                       project?.name ?? 'Unassigned',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    if (actionCue != null && !task.isCompleted)
+                      Text(
+                        actionCue!.shortLabel,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: actionCue!.isBlocked
+                              ? FontWeight.w700
+                              : null,
+                          color: actionCue!.isBlocked
+                              ? Theme.of(context).colorScheme.error
+                              : null,
+                        ),
+                      ),
                     if (task.dueAt != null)
                       Text(
                         overdue

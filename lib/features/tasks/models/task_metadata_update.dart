@@ -10,6 +10,9 @@ class TaskMetadataUpdate {
     this.estimatedMinutes,
     this.clearEstimatedMinutes = false,
     this.isFlexible,
+    this.dependsOnTaskIds,
+    this.waitingFor,
+    this.clearWaitingFor = false,
   });
 
   final String? projectId;
@@ -20,6 +23,9 @@ class TaskMetadataUpdate {
   final int? estimatedMinutes;
   final bool clearEstimatedMinutes;
   final bool? isFlexible;
+  final List<String>? dependsOnTaskIds;
+  final String? waitingFor;
+  final bool clearWaitingFor;
 
   void validate() {
     if (clearProjectId && projectId != null) {
@@ -27,6 +33,9 @@ class TaskMetadataUpdate {
     }
     if (clearDueAt && dueAt != null) {
       throw ArgumentError('dueAt cannot be set and cleared together.');
+    }
+    if (clearWaitingFor && waitingFor != null) {
+      throw ArgumentError('waitingFor cannot be set and cleared together.');
     }
     if (clearEstimatedMinutes && estimatedMinutes != null) {
       throw ArgumentError(

@@ -5,6 +5,7 @@ import '../../../../core/services/app_theme.dart';
 import '../../../personal_graph/models/personal_graph.dart';
 import '../../../projects/models/project.dart';
 import '../../../tasks/models/task.dart';
+import '../../../tasks/models/task_action_cue.dart';
 import '../../../tasks/models/task_metadata_update.dart';
 
 Future<TaskMetadataUpdate?> showTaskPlanningSheet({
@@ -12,6 +13,8 @@ Future<TaskMetadataUpdate?> showTaskPlanningSheet({
   required Task task,
   required List<Project> projects,
   PersonalGraphTaskContext? relatedContext,
+  List<Task> availableTasks = const <Task>[],
+  TaskActionCue? actionCue,
 }) {
   return showModalBottomSheet<TaskMetadataUpdate>(
     context: context,
@@ -20,6 +23,8 @@ Future<TaskMetadataUpdate?> showTaskPlanningSheet({
       task: task,
       projects: projects,
       relatedContext: relatedContext,
+      availableTasks: availableTasks,
+      actionCue: actionCue,
     ),
   );
 }
@@ -29,11 +34,15 @@ class _TaskPlanningSheet extends StatefulWidget {
     required this.task,
     required this.projects,
     this.relatedContext,
+    this.availableTasks = const <Task>[],
+    this.actionCue,
   });
 
   final Task task;
   final List<Project> projects;
   final PersonalGraphTaskContext? relatedContext;
+  final List<Task> availableTasks;
+  final TaskActionCue? actionCue;
 
   @override
   State<_TaskPlanningSheet> createState() => _TaskPlanningSheetState();
@@ -47,6 +56,8 @@ class _TaskPlanningSheetState extends State<_TaskPlanningSheet> {
   late PriorityLevel _priority;
   late bool _isFlexible;
   late final TextEditingController _effortController;
+  late final TextEditingController _waitingForController;
+  late final List<String> _dependencyIds;
 
   @override
   void initState() {
@@ -63,11 +74,16 @@ class _TaskPlanningSheetState extends State<_TaskPlanningSheet> {
     _effortController = TextEditingController(
       text: widget.task.estimatedMinutes?.toString() ?? '',
     );
+    _waitingForController = TextEditingController(
+      text: widget.task.waitingFor ?? '',
+    );
+    _dependencyIds = [...widget.task.dependsOnTaskIds];
   }
 
   @override
   void dispose() {
     _effortController.dispose();
+    _waitingForController.dispose();
     super.dispose();
   }
 
@@ -164,6 +180,82 @@ class _TaskPlanningSheetState extends State<_TaskPlanningSheet> {
                 prefixIcon: Icon(Icons.timelapse_rounded),
               ),
             ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Dependencies & blockers',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Use explicit prerequisites when another JotCue task must finish first. Use Waiting for for an external person, reply, approval, or event.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            if (_dependencyIds.isNotEmpty)
+              Wrap(
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  for (final dependencyId in _dependencyIds)
+                    InputChip(
+                      label: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 220),
+                        child: Text(
+                          _taskTitle(dependencyId),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      onDeleted: () =>
+                          setState(() => _dependencyIds.remove(dependencyId)),
+                    ),
+                ],
+              ),
+            if (_dependencyIds.isNotEmpty)
+              const SizedBox(height: AppSpacing.xs),
+            DropdownButtonFormField<String>(
+              key: const ValueKey('task-add-dependency'),
+              initialValue: null,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Add prerequisite task',
+                prefixIcon: Icon(Icons.account_tree_outlined),
+              ),
+              items: _dependencyOptions()
+                  .map(
+                    (task) => DropdownMenuItem<String>(
+                      value: task.id,
+                      child: Text(
+                        task.isCompleted ? '${task.title} · done' : task.title,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged: (value) {
+                if (value == null || _dependencyIds.contains(value)) return;
+                setState(() => _dependencyIds.add(value));
+              },
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            TextField(
+              key: const ValueKey('task-waiting-for'),
+              controller: _waitingForController,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Waiting for',
+                hintText: 'e.g. supervisor feedback',
+                prefixIcon: Icon(Icons.hourglass_top_rounded),
+              ),
+            ),
+            if (widget.actionCue?.isBlocked == true) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                widget.actionCue!.shortLabel,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ],
             const SizedBox(height: AppSpacing.sm),
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
@@ -183,6 +275,27 @@ class _TaskPlanningSheetState extends State<_TaskPlanningSheet> {
         ),
       ),
     );
+  }
+
+  List<Task> _dependencyOptions() {
+    final result = widget.availableTasks
+        .where(
+          (task) =>
+              task.id != widget.task.id && !_dependencyIds.contains(task.id),
+        )
+        .toList();
+    result.sort((a, b) {
+      if (a.isCompleted != b.isCompleted) return a.isCompleted ? 1 : -1;
+      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+    });
+    return result;
+  }
+
+  String _taskTitle(String taskId) {
+    for (final task in widget.availableTasks) {
+      if (task.id == taskId) return task.title;
+    }
+    return 'Missing task';
   }
 
   Future<void> _pickDueDate() async {
@@ -224,6 +337,11 @@ class _TaskPlanningSheetState extends State<_TaskPlanningSheet> {
         estimatedMinutes: effort,
         clearEstimatedMinutes: effort == null,
         isFlexible: _isFlexible,
+        dependsOnTaskIds: List.unmodifiable(_dependencyIds),
+        waitingFor: _waitingForController.text.trim().isEmpty
+            ? null
+            : _waitingForController.text.trim(),
+        clearWaitingFor: _waitingForController.text.trim().isEmpty,
       ),
     );
   }
@@ -252,6 +370,14 @@ class _RelatedContextCard extends StatelessWidget {
         _ContextChip(
           icon: Icons.folder_outlined,
           label: 'Project: ${project.label}',
+        ),
+      );
+    }
+    for (final prerequisite in context.prerequisiteTasks) {
+      items.add(
+        _ContextChip(
+          icon: Icons.account_tree_outlined,
+          label: 'Depends on: ${prerequisite.label}',
         ),
       );
     }

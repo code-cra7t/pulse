@@ -68,7 +68,7 @@ final schedulingDayProvider =
       final preferences =
           settings?.schedulingPreferences ?? SchedulingPreferences.defaults();
       final allBlocks = await ref.watch(scheduleBlocksStreamProvider.future);
-      final tasks = ref.watch(tasksProvider);
+      final tasks = ref.watch(actionableTasksProvider);
       final projects = await ref.watch(projectsStreamProvider.future);
       final acceptedBlocks = allBlocks
           .where(

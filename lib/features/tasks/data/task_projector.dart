@@ -42,6 +42,8 @@ class TaskProjector {
             priority: identitiesById[parsedTask.id]!.priority,
             estimatedMinutes: identitiesById[parsedTask.id]!.estimatedMinutes,
             isFlexible: identitiesById[parsedTask.id]!.isFlexible,
+            dependsOnTaskIds: identitiesById[parsedTask.id]!.dependsOnTaskIds,
+            waitingFor: identitiesById[parsedTask.id]!.waitingFor,
           ),
     ];
   }

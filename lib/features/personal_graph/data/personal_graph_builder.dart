@@ -69,19 +69,22 @@ class PersonalGraphBuilder {
     }
 
     for (final task in tasks) {
-      final taskNodeId = PersonalGraph.nodeId(
-        PersonalGraphNodeType.task,
-        task.id,
-      );
       _putNode(
         nodes,
         PersonalGraphNode(
-          id: taskNodeId,
+          id: PersonalGraph.nodeId(PersonalGraphNodeType.task, task.id),
           type: PersonalGraphNodeType.task,
           entityId: task.id,
           label: task.title,
           isCompleted: task.isCompleted,
         ),
+      );
+    }
+
+    for (final task in tasks) {
+      final taskNodeId = PersonalGraph.nodeId(
+        PersonalGraphNodeType.task,
+        task.id,
       );
 
       final sourceNote = noteById[task.sourceNoteId];
@@ -125,6 +128,29 @@ class PersonalGraphBuilder {
               type: PersonalGraphIntegrityIssueType.missingProject,
               entityId: task.id,
               missingReferenceId: projectId,
+            ),
+          );
+        }
+      }
+
+      for (final dependencyId in task.dependsOnTaskIds) {
+        if (taskById.containsKey(dependencyId)) {
+          edges.add(
+            _edge(
+              fromNodeId: taskNodeId,
+              toNodeId: PersonalGraph.nodeId(
+                PersonalGraphNodeType.task,
+                dependencyId,
+              ),
+              type: PersonalGraphEdgeType.dependsOnTask,
+            ),
+          );
+        } else {
+          issues.add(
+            PersonalGraphIntegrityIssue(
+              type: PersonalGraphIntegrityIssueType.missingDependencyTask,
+              entityId: task.id,
+              missingReferenceId: dependencyId,
             ),
           );
         }

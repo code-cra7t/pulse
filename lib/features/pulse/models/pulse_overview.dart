@@ -1,6 +1,7 @@
 import '../../../core/models/priority_level.dart';
 import '../../projects/models/project.dart';
 import '../../tasks/models/task.dart';
+import '../../tasks/models/task_action_cue.dart';
 
 enum PulseCueKind { overdue, deadline, unplanned }
 
@@ -51,6 +52,7 @@ class PulseOverview {
     required List<Project> projects,
     required List<Task> tasks,
     required DateTime now,
+    TaskDependencyAnalysis? dependencyAnalysis,
     int focusLimit = 3,
   }) {
     final today = DateTime(now.year, now.month, now.day);
@@ -59,13 +61,25 @@ class PulseOverview {
       for (final project in projects) project.id: project,
     };
     final openTasks = tasks.where((task) => !task.isCompleted).toList();
+    final focusCandidates = dependencyAnalysis == null
+        ? [...openTasks]
+        : openTasks
+              .where(
+                (task) =>
+                    dependencyAnalysis.cueForTask(task.id)?.isBlocked != true,
+              )
+              .toList();
 
     openTasks.sort(
       (a, b) =>
           _compareTasks(a, b, now: now, today: today, projectById: projectById),
     );
 
-    final focusTasks = openTasks.take(focusLimit).toList(growable: false);
+    focusCandidates.sort(
+      (a, b) =>
+          _compareTasks(a, b, now: now, today: today, projectById: projectById),
+    );
+    final focusTasks = focusCandidates.take(focusLimit).toList(growable: false);
     final focusItems = focusTasks
         .map(
           (task) => PulseFocusItem(

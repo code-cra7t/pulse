@@ -42,6 +42,7 @@ class PulseScreen extends ConsumerWidget {
     final projectsAsync = ref.watch(projectsStreamProvider);
     final projects = projectsAsync.asData?.value ?? const <Project>[];
     final tasks = ref.watch(tasksProvider);
+    final dependencyAnalysis = ref.watch(taskDependencyAnalysisProvider);
     final currentTime = now ?? DateTime.now();
     final replanningNow = DateTime(
       currentTime.year,
@@ -54,6 +55,7 @@ class PulseScreen extends ConsumerWidget {
       projects: projects,
       tasks: tasks,
       now: currentTime,
+      dependencyAnalysis: dependencyAnalysis,
     );
     final planningDate = DateTime(
       currentTime.year,
@@ -246,6 +248,8 @@ class PulseScreen extends ConsumerWidget {
       task: task,
       projects: projects,
       relatedContext: ref.read(taskGraphContextProvider(task.id)),
+      availableTasks: ref.read(tasksProvider),
+      actionCue: ref.read(taskActionCueProvider(task.id)),
     );
     if (update == null || !context.mounted) {
       return;
