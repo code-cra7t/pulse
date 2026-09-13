@@ -17,7 +17,7 @@ Current product surfaces:
 - Ask JotCue (deterministic on-device planning assistant with narrowly typed, preview-first actions)
 - Personal Graph (derived local relationships across notes, tasks, projects, deadlines, and accepted schedule blocks)
 - External text sharing into the review-first Quick Capture flow (Android)
-- Suggested scheduling (explicit availability + local calendar busy time + user-approved device-local blocks)
+- Suggested scheduling (explicit availability + local calendar busy time + user-approved accepted JotCue blocks with an offline local cache)
 - Adaptive replanning (reviewable drift/conflict/deadline-capacity suggestions)
 - Settings / profile
 
@@ -29,7 +29,7 @@ Rules:
 - Visible note content remains the source of truth for note-backed task text and completion.
 - Planning metadata must not rewrite visible note text.
 - Prefer deterministic planning logic before introducing AI-generated decisions.
-- Ask JotCue is local-first and ephemeral. Deterministic parsing/answers always run before optional Hybrid AI. Hybrid is device-local opt-in, may contact only the build-configured JotCue AI gateway, and must never persist chat history. Remote output may propose only the existing allow-listed Task completion, Task priority, or local accepted-block move actions; typing a request never executes it.
+- Ask JotCue is local-first and ephemeral. Deterministic parsing/answers always run before optional Hybrid AI. Hybrid is device-local opt-in, may contact only the build-configured JotCue AI gateway, and must never persist chat history. Remote output may propose only the existing allow-listed Task completion, Task priority, or accepted-block move actions; typing a request never executes it.
 - Do not introduce a fixed bot-face avatar for Ask JotCue; use JotCue brand language until a later personalized assistant-identity system is explicitly designed.
 - Preserve offline-first behavior.
 - Do not deploy Firebase rules unless explicitly instructed.
@@ -49,7 +49,7 @@ Calendar / availability rules:
 - Schedule-block calendar links must remain separate from reminder calendar links and may only own events created for that exact JotCue block.
 - Rescheduling a linked block must not silently update the external calendar; offer an explicit update choice.
 - Accepted JotCue schedule blocks are device-local until cross-device scheduling conflict semantics are designed.
-- Adaptive replanning is advisory by default. Never silently mark a block completed/missed. Trusted execution may move only one future flexible device-local proposal block at a time while Plan is open, only after the stored automation policy returns trustedEligible, only when the block is not linked to an external calendar, and only from a fresh deterministic suggestion. Recompute before any next move.
+- Adaptive replanning is advisory by default. Never silently mark a block completed/missed. Trusted execution may move only one future flexible JotCue proposal block at a time while Plan is open, only after the stored automation policy returns trustedEligible, only when the block is not linked to an external calendar, and only from a fresh deterministic suggestion. Recompute before any next move.
 - Non-flexible tasks may be flagged when their accepted block conflicts, but JotCue must not offer an automatic move suggestion for them.
 - Scheduling preferences may sync through the existing user settings document, but calendar event contents must remain local/in-memory.
 
@@ -121,3 +121,14 @@ Trusted automation rules:
 - Hybrid mode never bypasses explicit Apply in Ask JotCue, even at Trusted permission level.
 - Unknown/malformed tools, oversized responses, unavailable gateways, stale IDs, and invalid endpoints fail closed to a local answer with no mutation.
 - Remote answers/tool suggestions are ephemeral; do not persist chats, prompts, gateway responses, or model traces in this patch.
+
+
+## Patch 23 cross-device schedule-sync guardrails
+- Accepted JotCue schedule blocks may sync only inside the signed-in user's `users/{uid}/scheduleBlocks` subcollection. External calendar event contents never sync through this path.
+- Preserve offline-first local reads/writes. Queue mutations locally and replay them when connectivity returns.
+- Every synced block uses a monotonic integer revision. Updates/deletes must be based on the revision the local edit observed; never use silent last-write-wins for conflicting device edits.
+- If the server revision changed first, keep the newer synced state and record a local review item containing the losing local snapshot when available. Never automatically reapply a losing edit.
+- Existing revision-0 local blocks are migration candidates for first upload, not disposable legacy data.
+- Cross-device block sync must never silently update, delete, or create a device-calendar event. Calendar writes remain an explicit local approval flow.
+- Do not deploy Firestore rules unless explicitly instructed.
+- Detect newly introduced overlaps among synced canonical blocks and surface them for review; never silently treat a cross-device double-booking as healthy.

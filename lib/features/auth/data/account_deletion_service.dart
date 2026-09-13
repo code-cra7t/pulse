@@ -80,6 +80,21 @@ class AccountDeletionService {
     await _deleteQuery(
       _firestore.collection('projects').where('userId', isEqualTo: user.uid),
     );
+    try {
+      await _deleteQuery(
+        _firestore
+            .collection('users')
+            .doc(user.uid)
+            .collection('scheduleBlocks'),
+      );
+    } on FirebaseException catch (error) {
+      if (error.code != 'permission-denied') rethrow;
+      // Patch 23 can be installed before its additive Firestore rules are
+      // explicitly deployed. In that state no schedule-block cloud documents
+      // can be created, so lack of collection access must not block account
+      // deletion of the data that does exist.
+      debugPrint('[ScheduleSync] cloud cleanup unavailable: $error');
+    }
     await _firestore
         .collection('users')
         .doc(user.uid)

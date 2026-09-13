@@ -31,7 +31,7 @@ Flutter + Riverpod
        |
        +-- Sembast local database (all platforms)
        |      +-- cached notes and projects
-       |      +-- device-local accepted schedule blocks
+       |      +-- offline-cached, account-synced accepted schedule blocks
        |      +-- device-local trusted automation audit entries
        |      +-- pending note/project mutation queues
        |
@@ -47,8 +47,8 @@ update local state when available. Offline creates, edits, and deletes are
 queued and replayed when connectivity returns. Note-backed task text remains
 in the note while planning metadata is stored against stable task identities.
 Scheduling preferences sync through the existing user settings document, while
-external calendar events stay local/in-memory and accepted JotCue schedule
-blocks currently remain device-local. Trusted automation activity also remains device-local. The Personal Graph is derived in memory from this structured state and is not persisted as a separate dataset. Ask JotCue runs deterministic local reasoning first. If Hybrid assistance is explicitly enabled on the device and the build has an HTTPS JotCue AI gateway configured, only unsupported local queries may send the typed request plus a minimized structured planning snapshot to that gateway. Remote answers are ephemeral. Any remote tool suggestion is converted back into the same local typed action preview and must pass the existing permission and executor checks before an explicit Apply tap can mutate anything.
+external calendar events stay local/in-memory while accepted JotCue schedule
+blocks synchronize through the signed-in account with revision-checked offline-first conflict handling. Trusted automation activity also remains device-local. The Personal Graph is derived in memory from this structured state and is not persisted as a separate dataset. Ask JotCue runs deterministic local reasoning first. If Hybrid assistance is explicitly enabled on the device and the build has an HTTPS JotCue AI gateway configured, only unsupported local queries may send the typed request plus a minimized structured planning snapshot to that gateway. Remote answers are ephemeral. Any remote tool suggestion is converted back into the same local typed action preview and must pass the existing permission and executor checks before an explicit Apply tap can mutate anything.
 
 ## Local setup
 
@@ -108,3 +108,7 @@ Ask JotCue can deterministically interpret three explicit user commands: mark a 
 
 ### Hybrid AI / tool-calling foundation (Patch 22)
 Ask JotCue can optionally use a build-configured HTTPS gateway after deterministic local reasoning declines a query. Hybrid mode is off by default per device. The gateway receives a bounded structured planning snapshot rather than raw Notes or calendar events, and it can only return prose or one of the allow-listed Task completion, Task priority, or local schedule-move tool suggestions. Tool output never executes directly: JotCue resolves current local IDs, rebuilds a local action preview, applies the existing automation policy, and keeps the explicit Apply step. No provider secret is stored in the Flutter client and no chat history is persisted.
+
+
+### Cross-device schedule sync (Patch 23)
+Accepted JotCue schedule blocks now synchronize across signed-in devices while retaining a local Sembast cache for offline use. Every cloud-backed block has a monotonic revision. Offline changes queue with the revision they were based on and are applied transactionally only if the server is still at that revision. If another device changed or deleted the same block first, JotCue keeps the newer synced state and records a local Schedule sync review item instead of silently overwriting it. If independently-created synced blocks overlap, JotCue also surfaces that overlap for explicit review rather than treating the double-booking as healthy. Existing revision-0 device-local blocks are queued for first upload on the next successful sync. Device calendar events remain external/local and are never silently updated by cross-device block sync.

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/offline/offline_schedule_block_store.dart';
+import '../../../core/services/connectivity_providers.dart';
+import '../../../core/services/firebase_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../calendar/models/availability_summary.dart';
 import '../../calendar/models/calendar_busy_event.dart';
@@ -10,10 +12,13 @@ import '../../calendar/providers/calendar_providers.dart';
 import '../../projects/providers/project_providers.dart';
 import '../../settings/providers/user_settings_providers.dart';
 import '../../tasks/providers/task_providers.dart';
-import '../data/local_schedule_blocks_repository.dart';
+import '../data/firestore_schedule_block_remote_store.dart';
+import '../data/offline_first_schedule_blocks_repository.dart';
+import '../data/schedule_block_remote_store.dart';
 import '../data/schedule_blocks_repository.dart';
 import '../data/scheduling_proposal_engine.dart';
 import '../models/schedule_block.dart';
+import '../models/schedule_block_sync_conflict.dart';
 import '../models/scheduling_day_state.dart';
 import '../models/scheduling_preferences.dart';
 
@@ -25,15 +30,36 @@ final offlineScheduleBlockStoreProvider = Provider<OfflineScheduleBlockStore>((
   return store;
 });
 
+final scheduleBlockRemoteStoreProvider = Provider<ScheduleBlockRemoteStore>((
+  ref,
+) {
+  return FirestoreScheduleBlockRemoteStore(ref.watch(firestoreProvider));
+});
+
 final scheduleBlocksRepositoryProvider = Provider<ScheduleBlocksRepository>((
   ref,
 ) {
-  return LocalScheduleBlocksRepository(
+  final repository = OfflineFirstScheduleBlocksRepository(
+    ref.watch(scheduleBlockRemoteStoreProvider),
     ref.watch(offlineScheduleBlockStoreProvider),
   );
+  ref.onDispose(() => unawaited(repository.dispose()));
+  return repository;
+});
+
+final scheduleBlocksSyncProvider = Provider<void>((ref) {
+  final user = ref.watch(authStateChangesProvider).asData?.value;
+  final online = ref.watch(isOnlineProvider).asData?.value ?? false;
+  final repository = ref.watch(scheduleBlocksRepositoryProvider);
+  if (user != null &&
+      online &&
+      repository is OfflineFirstScheduleBlocksRepository) {
+    unawaited(repository.synchronize(user.uid));
+  }
 });
 
 final scheduleBlocksStreamProvider = StreamProvider<List<ScheduleBlock>>((ref) {
+  ref.watch(scheduleBlocksSyncProvider);
   final authState = ref.watch(authStateChangesProvider);
   final repository = ref.watch(scheduleBlocksRepositoryProvider);
   return authState.when(
@@ -47,6 +73,17 @@ final scheduleBlocksStreamProvider = StreamProvider<List<ScheduleBlock>>((ref) {
     error: (_, _) => Stream.value(const <ScheduleBlock>[]),
   );
 });
+
+final scheduleBlockSyncConflictsProvider =
+    StreamProvider<List<ScheduleBlockSyncConflict>>((ref) {
+      final user = ref.watch(authStateChangesProvider).asData?.value;
+      if (user == null) {
+        return Stream.value(const <ScheduleBlockSyncConflict>[]);
+      }
+      return ref
+          .watch(offlineScheduleBlockStoreProvider)
+          .watchConflicts(user.uid);
+    });
 
 final schedulingProposalEngineProvider = Provider<SchedulingProposalEngine>((
   ref,

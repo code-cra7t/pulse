@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 enum ScheduleBlockStatus {
   scheduled,
   completed,
@@ -36,6 +38,7 @@ class ScheduleBlock {
     this.projectId,
     this.status = ScheduleBlockStatus.scheduled,
     this.source = ScheduleBlockSource.proposal,
+    this.revision = 0,
   });
 
   final String id;
@@ -49,6 +52,10 @@ class ScheduleBlock {
   final ScheduleBlockSource source;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// Monotonic cloud revision. Legacy/device-only blocks use 0 until their
+  /// first successful sync, while Firestore-backed blocks start at 1.
+  final int revision;
 
   bool get isValid => endsAt.isAfter(startsAt);
   bool get occupiesTime => status == ScheduleBlockStatus.scheduled;
@@ -69,6 +76,7 @@ class ScheduleBlock {
     ScheduleBlockSource? source,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? revision,
   }) {
     return ScheduleBlock(
       id: id ?? this.id,
@@ -84,6 +92,27 @@ class ScheduleBlock {
       source: source ?? this.source,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      revision: revision ?? this.revision,
+    );
+  }
+
+  factory ScheduleBlock.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> document,
+  ) {
+    final data = document.data() ?? const <String, dynamic>{};
+    return ScheduleBlock(
+      id: data['id'] as String? ?? document.id,
+      userId: data['userId'] as String? ?? '',
+      taskId: data['taskId'] as String? ?? '',
+      title: data['title'] as String? ?? '',
+      projectId: data['projectId'] as String?,
+      startsAt: _dateFromTimestamp(data['startsAt']),
+      endsAt: _dateFromTimestamp(data['endsAt']),
+      status: ScheduleBlockStatus.fromValue(data['status'] as String?),
+      source: ScheduleBlockSource.fromValue(data['source'] as String?),
+      createdAt: _dateFromTimestamp(data['createdAt']),
+      updatedAt: _dateFromTimestamp(data['updatedAt']),
+      revision: data['revision'] as int? ?? 0,
     );
   }
 
@@ -108,7 +137,25 @@ class ScheduleBlock {
       updatedAt: DateTime.fromMillisecondsSinceEpoch(
         data['updatedAtMs'] as int? ?? 0,
       ),
+      revision: data['revision'] as int? ?? 0,
     );
+  }
+
+  Map<String, dynamic> toRemoteMap() {
+    return {
+      'id': id,
+      'userId': userId,
+      'taskId': taskId,
+      'title': title,
+      'projectId': projectId,
+      'startsAt': Timestamp.fromDate(startsAt),
+      'endsAt': Timestamp.fromDate(endsAt),
+      'status': status.name,
+      'source': source.name,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
+      'revision': revision,
+    };
   }
 
   Map<String, dynamic> toLocalMap() {
@@ -124,8 +171,15 @@ class ScheduleBlock {
       'source': source.name,
       'createdAtMs': createdAt.millisecondsSinceEpoch,
       'updatedAtMs': updatedAt.millisecondsSinceEpoch,
+      'revision': revision,
     };
   }
+}
+
+DateTime _dateFromTimestamp(Object? value) {
+  return value is Timestamp
+      ? value.toDate()
+      : DateTime.fromMillisecondsSinceEpoch(0);
 }
 
 const _unchanged = Object();

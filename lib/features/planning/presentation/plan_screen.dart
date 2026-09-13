@@ -19,10 +19,12 @@ import '../../calendar/providers/calendar_providers.dart';
 import '../../personal_graph/providers/personal_graph_providers.dart';
 import '../../projects/models/project.dart';
 import '../../scheduling/models/schedule_block.dart';
+import '../../scheduling/models/schedule_block_sync_conflict.dart';
 import '../../scheduling/models/replanning_overview.dart';
 import '../../scheduling/models/schedule_proposal.dart';
 import '../../scheduling/presentation/widgets/adaptive_replanning_section.dart';
 import '../../scheduling/presentation/widgets/scheduling_preferences_sheet.dart';
+import '../../scheduling/presentation/widgets/schedule_sync_conflicts_section.dart';
 import '../../scheduling/presentation/widgets/suggested_schedule_section.dart';
 import '../../scheduling/providers/replanning_providers.dart';
 import '../../scheduling/providers/scheduling_providers.dart';
@@ -70,6 +72,7 @@ class PlanScreen extends ConsumerWidget {
       currentTime.day,
     );
     final scheduleAsync = ref.watch(schedulingDayProvider(planningDate));
+    final scheduleSyncConflicts = ref.watch(scheduleBlockSyncConflictsProvider);
     final replanningAsync = ref.watch(
       adaptiveReplanningProvider(replanningNow),
     );
@@ -147,6 +150,15 @@ class PlanScreen extends ConsumerWidget {
                     _SyncNotice(
                       message:
                           'Projects are showing from local data. Cloud sync will retry automatically.',
+                    ),
+                  ],
+                  if (scheduleSyncConflicts.asData?.value.isNotEmpty ==
+                      true) ...[
+                    const SizedBox(height: AppSpacing.xl),
+                    ScheduleSyncConflictsSection(
+                      state: scheduleSyncConflicts,
+                      onDismiss: (conflict) =>
+                          _dismissScheduleSyncConflict(context, ref, conflict),
                     ),
                   ],
                   const SizedBox(height: AppSpacing.xl),
@@ -832,6 +844,25 @@ class PlanScreen extends ConsumerWidget {
       );
     }
     return granted;
+  }
+
+  Future<void> _dismissScheduleSyncConflict(
+    BuildContext context,
+    WidgetRef ref,
+    ScheduleBlockSyncConflict conflict,
+  ) async {
+    final user = ref.read(authStateChangesProvider).asData?.value;
+    if (user == null) return;
+    try {
+      await ref
+          .read(offlineScheduleBlockStoreProvider)
+          .dismissConflict(user.uid, conflict.id);
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not clear sync review: $error')),
+      );
+    }
   }
 
   Future<void> _setScheduleBlockStatus(

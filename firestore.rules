@@ -159,6 +159,33 @@ service cloud.firestore {
         && value.level in ['observe', 'suggest', 'approval', 'trusted'];
     }
 
+    function validScheduleBlock(userId, blockId, data) {
+      return data.keys().hasAll([
+          'id', 'userId', 'taskId', 'title', 'projectId', 'startsAt', 'endsAt',
+          'status', 'source', 'createdAt', 'updatedAt', 'revision'
+        ])
+        && data.keys().hasOnly([
+          'id', 'userId', 'taskId', 'title', 'projectId', 'startsAt', 'endsAt',
+          'status', 'source', 'createdAt', 'updatedAt', 'revision'
+        ])
+        && data.id == blockId
+        && data.userId == userId
+        && data.userId == request.auth.uid
+        && data.taskId is string
+        && data.taskId.size() > 0
+        && data.title is string
+        && (data.projectId is string || data.projectId == null)
+        && data.startsAt is timestamp
+        && data.endsAt is timestamp
+        && data.endsAt > data.startsAt
+        && data.status in ['scheduled', 'completed', 'skipped']
+        && data.source in ['proposal', 'user']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.revision is int
+        && data.revision >= 1;
+    }
+
     function validSettings(data) {
       return data.keys().hasAll([
           'themeMode', 'defaultNoteTag', 'notificationsEnabled',
@@ -214,6 +241,19 @@ service cloud.firestore {
           && settingsId == 'app'
           && validSettings(request.resource.data);
         allow delete: if isUser(userId) && settingsId == 'app';
+      }
+
+      match /scheduleBlocks/{blockId} {
+        allow read, delete: if isUser(userId);
+        allow create: if isUser(userId)
+          && validScheduleBlock(userId, blockId, request.resource.data)
+          && request.resource.data.revision == 1;
+        allow update: if isUser(userId)
+          && validScheduleBlock(userId, blockId, request.resource.data)
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.id == resource.data.id
+          && request.resource.data.revision == resource.data.revision + 1;
       }
     }
 
