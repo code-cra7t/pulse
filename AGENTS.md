@@ -15,6 +15,7 @@ Current product surfaces:
 - Plan (projects + task planning metadata)
 - Pulse (deterministic daily focus and attention cues)
 - Ask JotCue (deterministic read-only assistant over the current plan)
+- Personal Graph (derived local relationships across notes, tasks, projects, deadlines, and accepted schedule blocks)
 - External text sharing into the review-first Quick Capture flow (Android)
 - Suggested scheduling (explicit availability + local calendar busy time + user-approved device-local blocks)
 - Adaptive replanning (reviewable drift/conflict/deadline-capacity suggestions)
@@ -82,3 +83,11 @@ Trusted automation rules:
 - Notification taps may navigate to Pulse or Plan only; they must not mutate tasks, schedule blocks, reminders, or calendars.
 - Throttle unchanged schedule-attention signatures and cap imminent deadline cues.
 - Do not introduce a background task executor as part of proactive attention.
+
+## Patch 19 personal-graph guardrails
+- The Personal Graph is a derived local read model, never a second source of truth.
+- Build graph nodes/edges only from existing Notes, stable Tasks, Projects, deadlines, and accepted schedule blocks.
+- Do not persist or sync the graph as a separate dataset in this patch.
+- Broken references must fail visibly as integrity issues; never invent missing Notes, Projects, Tasks, or schedule relationships.
+- Reserved graph node types such as person, decision, and event are schema placeholders only until a later reviewed extraction/design patch populates them.
+- Relationship UI must remain secondary to the existing Notes/Plan experience and must not redesign Notes.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/models/priority_level.dart';
 import '../../../../core/services/app_theme.dart';
+import '../../../personal_graph/models/personal_graph.dart';
 import '../../../projects/models/project.dart';
 import '../../../tasks/models/task.dart';
 import '../../../tasks/models/task_metadata_update.dart';
@@ -10,19 +11,29 @@ Future<TaskMetadataUpdate?> showTaskPlanningSheet({
   required BuildContext context,
   required Task task,
   required List<Project> projects,
+  PersonalGraphTaskContext? relatedContext,
 }) {
   return showModalBottomSheet<TaskMetadataUpdate>(
     context: context,
     isScrollControlled: true,
-    builder: (context) => _TaskPlanningSheet(task: task, projects: projects),
+    builder: (context) => _TaskPlanningSheet(
+      task: task,
+      projects: projects,
+      relatedContext: relatedContext,
+    ),
   );
 }
 
 class _TaskPlanningSheet extends StatefulWidget {
-  const _TaskPlanningSheet({required this.task, required this.projects});
+  const _TaskPlanningSheet({
+    required this.task,
+    required this.projects,
+    this.relatedContext,
+  });
 
   final Task task;
   final List<Project> projects;
+  final PersonalGraphTaskContext? relatedContext;
 
   @override
   State<_TaskPlanningSheet> createState() => _TaskPlanningSheetState();
@@ -84,6 +95,10 @@ class _TaskPlanningSheetState extends State<_TaskPlanningSheet> {
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
+            if (widget.relatedContext?.hasRelatedContext == true) ...[
+              const SizedBox(height: AppSpacing.md),
+              _RelatedContextCard(context: widget.relatedContext!),
+            ],
             const SizedBox(height: AppSpacing.lg),
             DropdownButtonFormField<String>(
               initialValue: _projectId ?? _unassignedProjectValue,
@@ -212,6 +227,122 @@ class _TaskPlanningSheetState extends State<_TaskPlanningSheet> {
       ),
     );
   }
+}
+
+class _RelatedContextCard extends StatelessWidget {
+  const _RelatedContextCard({required this.context});
+
+  final PersonalGraphTaskContext context;
+
+  @override
+  Widget build(BuildContext buildContext) {
+    final items = <Widget>[];
+    final note = context.sourceNote;
+    final project = context.project;
+    final deadline = context.deadline;
+    final nextBlock = context.nextScheduleBlock(DateTime.now());
+
+    if (note != null) {
+      items.add(
+        _ContextChip(icon: Icons.note_outlined, label: 'Note: ${note.label}'),
+      );
+    }
+    if (project != null) {
+      items.add(
+        _ContextChip(
+          icon: Icons.folder_outlined,
+          label: 'Project: ${project.label}',
+        ),
+      );
+    }
+    if (deadline?.startsAt != null) {
+      items.add(
+        _ContextChip(
+          icon: Icons.event_outlined,
+          label: 'Deadline: ${_formatDate(deadline!.startsAt!)}',
+        ),
+      );
+    }
+    if (nextBlock?.startsAt != null && nextBlock?.endsAt != null) {
+      final extra = context.scheduleBlocks.length > 1
+          ? ' +${context.scheduleBlocks.length - 1} more'
+          : '';
+      items.add(
+        _ContextChip(
+          icon: Icons.schedule_outlined,
+          label:
+              'Scheduled: ${_formatDateTime(nextBlock!.startsAt!)}–${_formatTime(nextBlock.endsAt!)}$extra',
+        ),
+      );
+    }
+    if (context.integrityIssues.isNotEmpty) {
+      items.add(
+        const _ContextChip(
+          icon: Icons.link_off_rounded,
+          label: 'Some related context needs repair',
+        ),
+      );
+    }
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(buildContext).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Related context',
+              style: Theme.of(buildContext).textTheme.titleSmall,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Derived locally from the Note, Project, deadline, and accepted schedule linked to this task.',
+              style: Theme.of(buildContext).textTheme.bodySmall,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Wrap(
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
+              children: items,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ContextChip extends StatelessWidget {
+  const _ContextChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      avatar: Icon(icon, size: 16),
+      label: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 230),
+        child: Text(label, overflow: TextOverflow.ellipsis),
+      ),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+String _formatDateTime(DateTime value) {
+  return '${_formatDate(value)}, ${_formatTime(value)}';
+}
+
+String _formatTime(DateTime value) {
+  final hour = value.hour.toString().padLeft(2, '0');
+  final minute = value.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
 }
 
 class _DateField extends StatelessWidget {

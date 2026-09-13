@@ -10,6 +10,7 @@ import '../../assistant/presentation/ask_jotcue_sheet.dart';
 import '../../capture/presentation/natural_language_capture_sheet.dart';
 import '../../planning/presentation/widgets/task_planning_sheet.dart';
 import '../../planning/providers/planning_providers.dart';
+import '../../personal_graph/providers/personal_graph_providers.dart';
 import '../../projects/models/project.dart';
 import '../../scheduling/models/replanning_overview.dart';
 import '../../scheduling/models/schedule_block.dart';
@@ -244,6 +245,7 @@ class PulseScreen extends ConsumerWidget {
       context: context,
       task: task,
       projects: projects,
+      relatedContext: ref.read(taskGraphContextProvider(task.id)),
     );
     if (update == null || !context.mounted) {
       return;

@@ -16,6 +16,7 @@ import '../../automation/providers/automation_providers.dart';
 import '../../automation/providers/trusted_automation_providers.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../calendar/providers/calendar_providers.dart';
+import '../../personal_graph/providers/personal_graph_providers.dart';
 import '../../projects/models/project.dart';
 import '../../scheduling/models/schedule_block.dart';
 import '../../scheduling/models/replanning_overview.dart';
@@ -959,6 +960,7 @@ class PlanScreen extends ConsumerWidget {
       context: context,
       task: task,
       projects: projects,
+      relatedContext: ref.read(taskGraphContextProvider(task.id)),
     );
     if (update == null || !context.mounted) {
       return;

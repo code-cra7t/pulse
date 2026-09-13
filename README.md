@@ -14,6 +14,7 @@ planning signals.
 - Pulse workspace for deterministic daily focus and attention cues
 - Ask JotCue: an on-device, read-only conversational view of current planning state
 - Read-only Android calendar availability and deterministic scheduling proposals
+- Derived on-device Personal Graph across Notes, Tasks, Projects, deadlines, and accepted schedule blocks
 - User-defined planning windows, breaks, daily focus limits, and protected lunch
 - User-approved JotCue schedule blocks stored locally on the device
 - Trusted foreground-only local schedule moves in Plan, gated by assistant permissions and recorded in a device-local audit trail
@@ -46,7 +47,7 @@ queued and replayed when connectivity returns. Note-backed task text remains
 in the note while planning metadata is stored against stable task identities.
 Scheduling preferences sync through the existing user settings document, while
 external calendar events stay local/in-memory and accepted JotCue schedule
-blocks currently remain device-local. Trusted automation activity also remains device-local. Ask JotCue currently derives answers on device
+blocks currently remain device-local. Trusted automation activity also remains device-local. The Personal Graph is derived in memory from this structured state and is not persisted as a separate dataset. Ask JotCue currently derives answers on device
 from this structured state; conversations are ephemeral and no LLM/network call is made.
 
 ## Local setup
@@ -93,3 +94,6 @@ Trusted local schedule moves now have device-local pause controls, task/project 
 
 ### Proactive Attention Engine (Patch 18)
 JotCue can schedule device-local Morning Pulse and Daily Closing cues, resurface imminent/overdue tasks, and notify when deterministic replanning detects material schedule issues. Attention delivery respects device-local quiet hours, deduplicates stable planning issues, routes notification taps to Pulse or Plan, and remains separate from reminder alarms.
+
+### Personal Graph Foundation (Patch 19)
+JotCue now derives an on-device Personal Graph from existing Notes, stable Tasks, Projects, task/project deadlines, and accepted schedule blocks. The graph is a read model only: those existing objects remain the sources of truth, and no separate graph dataset is uploaded or synchronized. Task planning can surface graph-derived related context, while dangling references are exposed as integrity issues rather than silently fabricated.
