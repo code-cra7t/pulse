@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -12,8 +13,13 @@ import '../../../core/services/alarm_handoff_service.dart';
 import '../../../core/widgets/adaptive_shell.dart';
 import '../../../core/widgets/pulse_components.dart';
 import '../../../core/services/firebase_providers.dart';
+import '../../capture/presentation/natural_language_capture_sheet.dart';
+import '../../external_context/models/shared_capture_payload.dart';
+import '../../external_context/providers/external_context_providers.dart';
 import '../../profile/presentation/profile_screen.dart';
 import '../../profile/providers/user_profile_providers.dart';
+import '../../planning/presentation/plan_screen.dart';
+import '../../pulse/presentation/pulse_screen.dart';
 import '../../reminders/data/smart_reminder_parser.dart';
 import '../../reminders/data/assistant_plan_parser.dart';
 import '../../reminders/models/parsed_reminder.dart';
@@ -44,6 +50,10 @@ class NotesHomeScreen extends ConsumerStatefulWidget {
 
 class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
   StreamSubscription<String?>? _notificationSelectionSubscription;
+  StreamSubscription<SharedCapturePayload>? _sharedCaptureSubscription;
+  final Queue<SharedCapturePayload> _pendingSharedCaptures =
+      Queue<SharedCapturePayload>();
+  bool _showingSharedCapture = false;
   late final TextEditingController _searchController;
   MobileNoteFilter _homeFilter = MobileNoteFilter.all;
   _DesktopNoteFilter _desktopFilter = _DesktopNoteFilter.all;
@@ -68,11 +78,22 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
             _creatingDesktopNote = false;
           });
         });
+
+    final shareService = ref.read(deviceShareServiceProvider);
+    _sharedCaptureSubscription = shareService.sharedContent.listen((payload) {
+      if (!mounted) {
+        return;
+      }
+      _pendingSharedCaptures.add(payload);
+      _showNextSharedCapture();
+    });
+    unawaited(shareService.initialize());
   }
 
   @override
   void dispose() {
     _notificationSelectionSubscription?.cancel();
+    _sharedCaptureSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -88,30 +109,14 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
         .where((reminder) => !reminder.isCompleted)
         .map((reminder) => reminder.noteId)
         .toSet();
-    final mobileBaseNotes = switch (_navIndex) {
-      1 => filteredNotes.where((note) => _isToday(note.updatedAt)).toList(),
-      2 =>
-        filteredNotes
-            .where((note) => reminderNoteIds.contains(note.id))
-            .toList(),
-      _ => filteredNotes,
-    };
     final notes = _filterMobileNotes(
-      mobileBaseNotes,
+      filteredNotes,
       _homeFilter,
       reminderNoteIds,
     );
     final pinnedNotes = notes.where((note) => note.isPinned).toList();
     final remindersByNoteId = _remindersByNoteId(allReminders);
-    final navigationNotes = switch (_navIndex) {
-      1 => filteredNotes.where((note) => _isToday(note.updatedAt)).toList(),
-      2 =>
-        filteredNotes
-            .where((note) => reminderNoteIds.contains(note.id))
-            .toList(),
-      _ => filteredNotes,
-    };
-    final desktopNotes = navigationNotes.where((note) {
+    final desktopNotes = filteredNotes.where((note) {
       return switch (_desktopFilter) {
         _DesktopNoteFilter.all => true,
         _DesktopNoteFilter.work => _hasTag(note, 'Work'),
@@ -154,6 +159,13 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
         ),
         data: (_) => _navIndex == 3
             ? SettingsScreen(onOpenProfile: _openProfile)
+            : _navIndex == 2
+            ? const PlanScreen()
+            : _navIndex == 1
+            ? PulseScreen(
+                displayName: profileName,
+                onOpenPlan: () => _selectDestination(2),
+              )
             : MobileHomeScreen(
                 notes: notes,
                 pinnedNotes: pinnedNotes,
@@ -184,11 +196,6 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
                 onFilterSelected: (selectedFilter) {
                   setState(() {
                     _homeFilter = selectedFilter;
-                    if (selectedFilter == MobileNoteFilter.reminders) {
-                      _navIndex = 2;
-                    } else if (_navIndex == 2) {
-                      _navIndex = 0;
-                    }
                   });
                 },
                 onSearchChanged: (value) {
@@ -204,6 +211,15 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
                 onProfileTap: _openProfile,
               ),
       ),
+      desktopWorkspace: _navIndex == 2
+          ? const PlanScreen(embedded: true)
+          : _navIndex == 1
+          ? PulseScreen(
+              embedded: true,
+              displayName: profileName,
+              onOpenPlan: () => _selectDestination(2),
+            )
+          : null,
       desktopList: notesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => _DesktopErrorState(error: error),
@@ -236,12 +252,36 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
     );
   }
 
+  void _showNextSharedCapture() {
+    if (!mounted || _showingSharedCapture || _pendingSharedCaptures.isEmpty) {
+      return;
+    }
+    final payload = _pendingSharedCaptures.removeFirst();
+    _showingSharedCapture = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        _showingSharedCapture = false;
+        return;
+      }
+      try {
+        await showNaturalLanguageCaptureSheet(
+          context: context,
+          initialText: payload.captureText,
+          sourceLabel: 'another app',
+        );
+      } finally {
+        if (mounted) {
+          _showingSharedCapture = false;
+          _showNextSharedCapture();
+        }
+      }
+    });
+  }
+
   void _selectDestination(int index) {
     setState(() {
       _navIndex = index;
-      _homeFilter = index == 2
-          ? MobileNoteFilter.reminders
-          : MobileNoteFilter.all;
+      _homeFilter = MobileNoteFilter.all;
       if (index == 3) {
         _creatingDesktopNote = false;
         _showingDesktopProfile = false;
@@ -331,13 +371,6 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
     ).push(MaterialPageRoute<void>(builder: (_) => const ProfileScreen()));
   }
 
-  bool _isToday(DateTime value) {
-    final now = DateTime.now();
-    return value.year == now.year &&
-        value.month == now.month &&
-        value.day == now.day;
-  }
-
   bool _hasTag(Note note, String value) {
     return note.tags.any((tag) => tag.toLowerCase() == value.toLowerCase());
   }
@@ -367,7 +400,12 @@ class _NotesHomeScreenState extends ConsumerState<NotesHomeScreen> {
             .toList(),
       MobileNoteFilter.todo =>
         source
-            .where((note) => TaskParser.extractTasks(note.content).isNotEmpty)
+            .where(
+              (note) => TaskParser.extractTasks(
+                note.content,
+                identities: note.taskIdentities,
+              ).isNotEmpty,
+            )
             .toList(),
       MobileNoteFilter.reminders =>
         source.where((note) => reminderNoteIds.contains(note.id)).toList(),
@@ -676,7 +714,10 @@ class _DesktopNotePreviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = note.title?.trim();
     final plainText = TaskParser.extractPlainTextLines(note.content).join(' ');
-    final tasks = TaskParser.extractTasks(note.content);
+    final tasks = TaskParser.extractTasks(
+      note.content,
+      identities: note.taskIdentities,
+    );
     final completedTasks = tasks.where((task) => task.isCompleted).length;
     final noteColor = Color(note.color);
     final foreground = AppColors.textFor(noteColor);
@@ -850,10 +891,14 @@ class _NoteCard extends ConsumerWidget {
     final noteTag = NoteColorTag.fromColor(note.color);
     final title = note.title?.trim();
     final hasTitle = title != null && title.isNotEmpty;
-    final tasks = TaskParser.extractTasks(note.content);
+    final tasks = TaskParser.extractTasks(
+      note.content,
+      identities: note.taskIdentities,
+    );
     final taskSuggestions = TaskParser.extractTaskReminderSuggestions(
       note.content,
       SmartReminderParser(),
+      identities: note.taskIdentities,
     );
     final plainText = TaskParser.extractPlainTextLines(note.content).join('\n');
     final displayTimestamp = note.updatedAt == note.createdAt
@@ -1417,18 +1462,9 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                         ),
                         const SizedBox(width: AppSpacing.xs),
                         Flexible(
-                          child: Wrap(
-                            spacing: AppSpacing.xs,
-                            runSpacing: AppSpacing.xs,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              AppChip(
-                                label: _selectedCategory ?? 'No category',
-                              ),
-                              _NoteColorBadge(
-                                tag: NoteColorTag.fromColor(_selectedColor),
-                              ),
-                            ],
+                          child: AppChip(
+                            label: _selectedCategory ?? 'No category',
+                            color: Color(_selectedColor),
                           ),
                         ),
                         const Spacer(),
@@ -1685,9 +1721,17 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                               }).toList(),
                             ),
                             const SizedBox(height: AppSpacing.md),
-                            Text(
-                              'Note color',
-                              style: Theme.of(context).textTheme.titleSmall,
+                            Row(
+                              children: [
+                                Text(
+                                  'Note color',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                const SizedBox(width: AppSpacing.sm),
+                                _NoteColorBadge(
+                                  tag: NoteColorTag.fromColor(_selectedColor),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: AppSpacing.xs),
                             Wrap(
@@ -1770,20 +1814,26 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                               ),
                               tooltip: 'Add reminder',
                             ),
-                            const Spacer(),
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 150),
-                              child: Text(
-                                _saveStatusLabel,
-                                key: ValueKey(_draftController.status),
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color:
-                                          _draftController.status ==
-                                              NoteSaveStatus.failed
-                                          ? Theme.of(context).colorScheme.error
-                                          : null,
-                                    ),
+                            Expanded(
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 150),
+                                child: Text(
+                                  _saveStatusLabel,
+                                  key: ValueKey(_draftController.status),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.end,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color:
+                                            _draftController.status ==
+                                                NoteSaveStatus.failed
+                                            ? Theme.of(
+                                                context,
+                                              ).colorScheme.error
+                                            : null,
+                                      ),
+                                ),
                               ),
                             ),
                             const SizedBox(width: AppSpacing.sm),
@@ -1791,6 +1841,9 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
                               onPressed: (_isSaving || _isUploadingImage)
                                   ? null
                                   : _saveNow,
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(0, 44),
+                              ),
                               icon: _isSaving
                                   ? const SizedBox(
                                       width: 16,
@@ -2056,6 +2109,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
             userId: widget.userId,
             noteId: note.id,
             taskLineIndex: task.lineIndex,
+            taskId: _resolvedTaskId(note, task),
             notePreview: task.text,
             scheduledAt: suggestion.dateTime,
             repeat: suggestion.repeat,
@@ -2210,6 +2264,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
               userId: widget.userId,
               noteId: note.id,
               taskLineIndex: task.lineIndex,
+              taskId: _resolvedTaskId(note, task),
               notePreview: task.text,
               scheduledAt: scheduledAt,
               repeat: RepeatType.none,
@@ -2228,6 +2283,7 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
               scheduledAt: scheduledAt,
               notePreview: task.text,
               taskLineIndex: task.lineIndex,
+              taskId: _resolvedTaskId(note, task),
             ),
           );
       _showMessage('Reminder updated.');
@@ -2309,6 +2365,19 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     return 'Reminder created for ${_formatDateTime(parsed.dateTime)}.';
   }
 
+  String? _resolvedTaskId(Note note, NoteTask task) {
+    if (task.id != null && task.id!.isNotEmpty) {
+      return task.id;
+    }
+    for (final identity in note.taskIdentities) {
+      if (identity.lineIndex == task.lineIndex &&
+          identity.matchesText(task.text)) {
+        return identity.id;
+      }
+    }
+    return null;
+  }
+
   String _formatDateTime(DateTime value) {
     final date = MaterialLocalizations.of(context).formatShortDate(value);
     final time = MaterialLocalizations.of(
@@ -2341,7 +2410,10 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
       if (!saved) {
         throw StateError('Save the latest note changes before continuing.');
       }
-      return _currentNoteSnapshot().copyWith(id: existingId);
+      final storedNote = await ref
+          .read(notesServiceProvider)
+          .readLocalNote(widget.userId, existingId);
+      return storedNote ?? _currentNoteSnapshot().copyWith(id: existingId);
     }
 
     final saved = await _draftController.saveNow(force: true);
@@ -2349,7 +2421,10 @@ class _NoteEditorSheetState extends ConsumerState<NoteEditorSheet> {
     if (!saved || noteId == null || noteId.isEmpty) {
       throw StateError('Could not create the note before continuing.');
     }
-    return _currentNoteSnapshot().copyWith(id: noteId);
+    final storedNote = await ref
+        .read(notesServiceProvider)
+        .readLocalNote(widget.userId, noteId);
+    return storedNote ?? _currentNoteSnapshot().copyWith(id: noteId);
   }
 }
 
@@ -2566,7 +2641,7 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
       if (reminder.isCompleted) {
         continue;
       }
-      final lineIndex = reminder.taskLineIndex;
+      final lineIndex = _lineIndexForReminder(reminder);
       if (lineIndex == null) {
         continue;
       }
@@ -2580,6 +2655,18 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
     }
 
     return map;
+  }
+
+  int? _lineIndexForReminder(Reminder reminder) {
+    final taskId = reminder.taskId;
+    if (taskId != null && taskId.isNotEmpty) {
+      for (final task in widget.tasks) {
+        if (task.id == taskId) {
+          return task.lineIndex;
+        }
+      }
+    }
+    return reminder.taskLineIndex;
   }
 
   Future<void> _handleToggle(
@@ -2640,6 +2727,7 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
             userId: user.uid,
             noteId: widget.note.id,
             taskLineIndex: task.lineIndex,
+            taskId: task.id,
             notePreview: task.text,
             scheduledAt: suggestion.dateTime,
             repeat: suggestion.repeat,
@@ -2730,6 +2818,7 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
               userId: user.uid,
               noteId: widget.note.id,
               taskLineIndex: task.lineIndex,
+              taskId: task.id,
               notePreview: task.text,
               scheduledAt: scheduledAt,
               repeat: RepeatType.none,
@@ -2748,6 +2837,7 @@ class _TaskListViewState extends ConsumerState<_TaskListView> {
               scheduledAt: scheduledAt,
               notePreview: task.text,
               taskLineIndex: task.lineIndex,
+              taskId: task.id,
             ),
           );
       _showMessage('Reminder updated.');

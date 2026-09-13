@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../tasks/models/note_task_identity.dart';
+
 const _unsetTitle = Object();
 
 class Note {
@@ -14,6 +16,7 @@ class Note {
     required this.content,
     required this.color,
     required this.images,
+    this.taskIdentities = const <NoteTaskIdentity>[],
   });
 
   final String id;
@@ -26,6 +29,7 @@ class Note {
   final String content;
   final int color;
   final List<String> images;
+  final List<NoteTaskIdentity> taskIdentities;
 
   factory Note.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? <String, dynamic>{};
@@ -49,6 +53,7 @@ class Note {
       content: data['content'] as String? ?? '',
       color: data['color'] as int? ?? 0xFFFFF8E1,
       images: _readImageUrls(data),
+      taskIdentities: _readTaskIdentities(data),
     );
   }
 
@@ -70,6 +75,7 @@ class Note {
       content: data['content'] as String? ?? '',
       color: data['color'] as int? ?? 0xFFFFF8E1,
       images: _readImageUrls(data),
+      taskIdentities: _readTaskIdentities(data),
     );
   }
 
@@ -84,6 +90,7 @@ class Note {
       'content': content,
       'color': color,
       'images': images,
+      'taskIdentities': taskIdentities.map((item) => item.toMap()).toList(),
     };
   }
 
@@ -99,6 +106,7 @@ class Note {
       'content': content,
       'color': color,
       'images': images,
+      'taskIdentities': taskIdentities.map((item) => item.toMap()).toList(),
     };
   }
 
@@ -113,6 +121,7 @@ class Note {
     String? content,
     int? color,
     List<String>? images,
+    List<NoteTaskIdentity>? taskIdentities,
   }) {
     return Note(
       id: id ?? this.id,
@@ -125,6 +134,7 @@ class Note {
       content: content ?? this.content,
       color: color ?? this.color,
       images: images ?? this.images,
+      taskIdentities: taskIdentities ?? this.taskIdentities,
     );
   }
 }
@@ -143,4 +153,17 @@ List<String> _readImageUrls(Map<String, dynamic> data) {
     }
   }
   return urls.toList();
+}
+
+List<NoteTaskIdentity> _readTaskIdentities(Map<String, dynamic> data) {
+  final raw = data['taskIdentities'];
+  if (raw is! List) {
+    return const <NoteTaskIdentity>[];
+  }
+
+  return raw
+      .whereType<Map>()
+      .map((item) => NoteTaskIdentity.fromMap(Map<String, dynamic>.from(item)))
+      .where((identity) => identity.id.isNotEmpty && identity.lineIndex >= 0)
+      .toList(growable: false);
 }

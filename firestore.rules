@@ -21,7 +21,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'userId', 'title', 'isPinned', 'createdAt', 'updatedAt',
-          'tags', 'content', 'color', 'images', 'imageUrls'
+          'tags', 'content', 'color', 'images', 'imageUrls', 'taskIdentities'
         ])
         && data.userId == request.auth.uid
         && (data.title is string || data.title == null)
@@ -32,7 +32,30 @@ service cloud.firestore {
         && data.content is string
         && data.color is int
         && data.images is list
-        && (!data.keys().hasAny(['imageUrls']) || data.imageUrls is list);
+        && (!data.keys().hasAny(['imageUrls']) || data.imageUrls is list)
+        && (!data.keys().hasAny(['taskIdentities']) || data.taskIdentities is list);
+    }
+
+    function validProject(data) {
+      return data.keys().hasAll([
+          'userId', 'name', 'description', 'status', 'priority', 'deadline',
+          'targetMinutesPerWeek', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'userId', 'name', 'description', 'status', 'priority', 'deadline',
+          'targetMinutesPerWeek', 'createdAt', 'updatedAt'
+        ])
+        && data.userId == request.auth.uid
+        && data.name is string
+        && data.name.size() > 0
+        && data.description is string
+        && data.status in ['active', 'paused', 'completed', 'archived']
+        && data.priority in ['none', 'low', 'medium', 'high', 'critical']
+        && (data.deadline is timestamp || data.deadline == null)
+        && (data.targetMinutesPerWeek is int || data.targetMinutesPerWeek == null)
+        && (data.targetMinutesPerWeek == null || data.targetMinutesPerWeek >= 0)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
     }
 
     function validReminder(data) {
@@ -43,11 +66,12 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'userId', 'noteId', 'taskLineIndex', 'notePreview', 'scheduledAt',
           'isCompleted', 'repeat', 'notificationId', 'createdAt', 'updatedAt',
-          'title', 'repeatIntervalMinutes'
+          'title', 'repeatIntervalMinutes', 'taskId'
         ])
         && data.userId == request.auth.uid
         && data.noteId is string
         && (data.taskLineIndex is int || data.taskLineIndex == null)
+        && (data.get('taskId', null) == null || data.get('taskId', null) is string)
         && data.notePreview is string
         && (!data.keys().hasAny(['title']) || data.title is string)
         && data.scheduledAt is timestamp
@@ -77,6 +101,57 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function validSchedulingPreferences(value) {
+      return value is map
+        && value.keys().hasAll([
+          'isConfigured', 'dayStartMinutes', 'dayEndMinutes',
+          'availableWeekdays', 'minimumBlockMinutes', 'preferredBlockMinutes',
+          'breakMinutes', 'maxFocusMinutesPerDay', 'defaultTaskMinutes',
+          'protectLunch', 'lunchStartMinutes', 'lunchEndMinutes'
+        ])
+        && value.keys().hasOnly([
+          'isConfigured', 'dayStartMinutes', 'dayEndMinutes',
+          'availableWeekdays', 'minimumBlockMinutes', 'preferredBlockMinutes',
+          'breakMinutes', 'maxFocusMinutesPerDay', 'defaultTaskMinutes',
+          'protectLunch', 'lunchStartMinutes', 'lunchEndMinutes'
+        ])
+        && value.isConfigured is bool
+        && value.dayStartMinutes is int
+        && value.dayStartMinutes >= 0
+        && value.dayStartMinutes < 1440
+        && value.dayEndMinutes is int
+        && value.dayEndMinutes > value.dayStartMinutes
+        && value.dayEndMinutes < 1440
+        && value.availableWeekdays is list
+        && value.availableWeekdays.size() > 0
+        && value.minimumBlockMinutes is int
+        && value.minimumBlockMinutes >= 15
+        && value.minimumBlockMinutes <= 240
+        && value.preferredBlockMinutes is int
+        && value.preferredBlockMinutes >= value.minimumBlockMinutes
+        && value.preferredBlockMinutes <= 360
+        && value.breakMinutes is int
+        && value.breakMinutes >= 0
+        && value.breakMinutes <= 120
+        && value.maxFocusMinutesPerDay is int
+        && value.maxFocusMinutesPerDay >= value.minimumBlockMinutes
+        && value.maxFocusMinutesPerDay <= 960
+        && value.defaultTaskMinutes is int
+        && value.defaultTaskMinutes >= 15
+        && value.defaultTaskMinutes <= 480
+        && value.protectLunch is bool
+        && value.lunchStartMinutes is int
+        && value.lunchStartMinutes >= 0
+        && value.lunchStartMinutes < 1440
+        && value.lunchEndMinutes is int
+        && value.lunchEndMinutes >= 0
+        && value.lunchEndMinutes < 1440
+        && (value.protectLunch == false
+          || (value.lunchStartMinutes >= value.dayStartMinutes
+            && value.lunchEndMinutes > value.lunchStartMinutes
+            && value.lunchEndMinutes <= value.dayEndMinutes));
+    }
+
     function validAutomationPreferences(value) {
       return value is map
         && value.keys().hasAll(['level'])
@@ -91,12 +166,14 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'themeMode', 'defaultNoteTag', 'notificationsEnabled',
-          'smartRemindersEnabled', 'automation', 'updatedAt'
+          'smartRemindersEnabled', 'scheduling', 'automation', 'updatedAt'
         ])
         && data.themeMode in ['system', 'light', 'dark']
         && data.defaultNoteTag is string
         && data.notificationsEnabled is bool
         && data.smartRemindersEnabled is bool
+        && (!data.keys().hasAny(['scheduling'])
+          || validSchedulingPreferences(data.scheduling))
         && (!data.keys().hasAny(['automation'])
           || validAutomationPreferences(data.automation))
         && data.updatedAt is timestamp;
@@ -107,6 +184,14 @@ service cloud.firestore {
       allow create: if signedIn() && validNote(request.resource.data);
       allow update: if owns(resource.data)
         && validNote(request.resource.data)
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    match /projects/{projectId} {
+      allow read, delete: if owns(resource.data);
+      allow create: if signedIn() && validProject(request.resource.data);
+      allow update: if owns(resource.data)
+        && validProject(request.resource.data)
         && request.resource.data.userId == resource.data.userId;
     }
 

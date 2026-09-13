@@ -99,11 +99,15 @@ class AppChip extends StatelessWidget {
                 Icon(icon, size: 16, color: foreground),
                 const SizedBox(width: 6),
               ],
-              Text(
-                label,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: foreground,
-                  fontWeight: FontWeight.w700,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: foreground,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
@@ -253,8 +257,8 @@ class FloatingBottomNav extends StatelessWidget {
                             ),
                             Expanded(
                               child: _NavItem(
-                                icon: Icons.light_mode_outlined,
-                                label: 'Today',
+                                icon: Icons.bolt_outlined,
+                                label: 'Pulse',
                                 showLabel: showLabels,
                                 selected: selectedIndex == 1,
                                 onTap: () => onDestinationSelected(1),
@@ -263,8 +267,8 @@ class FloatingBottomNav extends StatelessWidget {
                             const SizedBox(width: 72),
                             Expanded(
                               child: _NavItem(
-                                icon: Icons.notifications_none_rounded,
-                                label: 'Reminders',
+                                icon: Icons.view_week_outlined,
+                                label: 'Plan',
                                 showLabel: showLabels,
                                 selected: selectedIndex == 2,
                                 onTap: () => onDestinationSelected(2),

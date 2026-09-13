@@ -1,6 +1,7 @@
-import '../models/note_task.dart';
 import '../../reminders/data/smart_reminder_parser.dart';
 import '../../reminders/models/parsed_reminder.dart';
+import '../../tasks/models/note_task_identity.dart';
+import '../models/note_task.dart';
 
 class TaskParser {
   static final RegExp _completedTaskPattern = RegExp(
@@ -12,9 +13,15 @@ class TaskParser {
     r'^(\s*)- \[([ xX])\]\s?(.*)$',
   );
 
-  static List<NoteTask> extractTasks(String content) {
+  static List<NoteTask> extractTasks(
+    String content, {
+    List<NoteTaskIdentity> identities = const <NoteTaskIdentity>[],
+  }) {
     final lines = content.split('\n');
     final tasks = <NoteTask>[];
+    final identitiesByLine = <int, NoteTaskIdentity>{
+      for (final identity in identities) identity.lineIndex: identity,
+    };
 
     for (var index = 0; index < lines.length; index++) {
       final legacyMatch = _legacyCheckboxTaskPattern.firstMatch(lines[index]);
@@ -22,6 +29,7 @@ class TaskParser {
       if (legacyMatch != null && legacyText.isNotEmpty) {
         tasks.add(
           NoteTask(
+            id: _taskIdFor(identitiesByLine[index], legacyText),
             lineIndex: index,
             text: legacyText,
             isCompleted: (legacyMatch.group(2) ?? '').toLowerCase() == 'x',
@@ -34,7 +42,12 @@ class TaskParser {
       final completedText = (completedMatch?.group(2) ?? '').trim();
       if (completedMatch != null && completedText.isNotEmpty) {
         tasks.add(
-          NoteTask(lineIndex: index, text: completedText, isCompleted: true),
+          NoteTask(
+            id: _taskIdFor(identitiesByLine[index], completedText),
+            lineIndex: index,
+            text: completedText,
+            isCompleted: true,
+          ),
         );
         continue;
       }
@@ -42,7 +55,14 @@ class TaskParser {
       final bulletMatch = _bulletTaskPattern.firstMatch(lines[index]);
       final text = (bulletMatch?.group(2) ?? '').trim();
       if (bulletMatch != null && text.isNotEmpty) {
-        tasks.add(NoteTask(lineIndex: index, text: text, isCompleted: false));
+        tasks.add(
+          NoteTask(
+            id: _taskIdFor(identitiesByLine[index], text),
+            lineIndex: index,
+            text: text,
+            isCompleted: false,
+          ),
+        );
         continue;
       }
     }
@@ -146,9 +166,10 @@ class TaskParser {
 
   static List<TaskReminderSuggestion> extractTaskReminderSuggestions(
     String content,
-    SmartReminderParser reminderParser,
-  ) {
-    return extractTasks(content)
+    SmartReminderParser reminderParser, {
+    List<NoteTaskIdentity> identities = const <NoteTaskIdentity>[],
+  }) {
+    return extractTasks(content, identities: identities)
         .map((task) {
           final reminder = reminderParser.parse(task.text);
           if (reminder == null) {
@@ -159,6 +180,13 @@ class TaskParser {
         })
         .whereType<TaskReminderSuggestion>()
         .toList();
+  }
+
+  static String? _taskIdFor(NoteTaskIdentity? identity, String text) {
+    if (identity == null || identity.id.trim().isEmpty) {
+      return null;
+    }
+    return identity.matchesText(text) ? identity.id : null;
   }
 
   static List<String> extractPlainTextLines(String content) {

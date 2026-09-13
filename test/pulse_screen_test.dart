@@ -1,0 +1,260 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:pulse/core/models/priority_level.dart';
+import 'package:pulse/core/services/app_theme.dart';
+import 'package:pulse/features/projects/models/project.dart';
+import 'package:pulse/features/projects/providers/project_providers.dart';
+import 'package:pulse/features/scheduling/models/schedule_block.dart';
+import 'package:pulse/features/scheduling/providers/scheduling_providers.dart';
+import 'package:pulse/features/settings/models/user_settings.dart';
+import 'package:pulse/features/settings/providers/user_settings_providers.dart';
+import 'package:pulse/features/pulse/presentation/pulse_screen.dart';
+import 'package:pulse/features/tasks/models/task.dart';
+import 'package:pulse/features/tasks/providers/task_providers.dart';
+
+void main() {
+  testWidgets('Pulse shows personalized focus and planning signals', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(432, 960);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final project = Project(
+      id: 'exam',
+      userId: 'user',
+      name: 'Life insurance exam',
+      deadline: DateTime(2026, 9, 15),
+      priority: PriorityLevel.critical,
+      createdAt: DateTime(2026, 9, 1),
+      updatedAt: DateTime(2026, 9, 12),
+    );
+    final tasks = [
+      Task(
+        id: 'task-1',
+        userId: 'user',
+        title: 'Revise chapter 4',
+        isCompleted: false,
+        sourceNoteId: 'note-1',
+        sourceLineIndex: 1,
+        projectId: project.id,
+        dueAt: DateTime(2026, 9, 13, 20),
+        priority: PriorityLevel.high,
+        estimatedMinutes: 90,
+      ),
+      Task(
+        id: 'task-2',
+        userId: 'user',
+        title: 'Send application',
+        isCompleted: false,
+        sourceNoteId: 'note-2',
+        sourceLineIndex: 2,
+        dueAt: DateTime(2026, 9, 12, 18),
+      ),
+    ];
+
+    var openedPlan = false;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          projectsStreamProvider.overrideWith((ref) => Stream.value([project])),
+          tasksProvider.overrideWith((ref) => tasks),
+          currentUserSettingsProvider.overrideWith(
+            (ref) => Stream.value(UserSettings.defaults()),
+          ),
+          scheduleBlocksStreamProvider.overrideWith(
+            (ref) => Stream.value(const <ScheduleBlock>[]),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.build(),
+          home: Scaffold(
+            body: PulseScreen(
+              now: DateTime(2026, 9, 13, 9),
+              displayName: 'Tori Example',
+              onOpenPlan: () => openedPlan = true,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.text('Good morning, Tori'), findsOneWidget);
+    expect(find.text('Morning Pulse'), findsOneWidget);
+    expect(find.text('Your day at a glance'), findsOneWidget);
+    expect(find.text('Revise chapter 4'), findsOneWidget);
+    expect(find.text('Send application'), findsOneWidget);
+
+    await tester.tap(find.text('Open Plan'));
+    expect(openedPlan, isTrue);
+
+    await tester.drag(
+      find.byKey(const ValueKey('pulse-screen-scroll')),
+      const Offset(0, -700),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('1 overdue task'), findsOneWidget);
+    expect(find.text('1 project deadline this week'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('empty Pulse explains how to create useful signals', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(432, 960);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          projectsStreamProvider.overrideWith(
+            (ref) => Stream.value(const <Project>[]),
+          ),
+          tasksProvider.overrideWith((ref) => const <Task>[]),
+          currentUserSettingsProvider.overrideWith(
+            (ref) => Stream.value(UserSettings.defaults()),
+          ),
+          scheduleBlocksStreamProvider.overrideWith(
+            (ref) => Stream.value(const <ScheduleBlock>[]),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.build(),
+          home: Scaffold(body: PulseScreen(now: DateTime(2026, 9, 13, 19))),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.text('Good evening'), findsOneWidget);
+    expect(find.text("Today's Pulse"), findsOneWidget);
+    expect(find.text('Daily Closing'), findsOneWidget);
+    expect(find.text('Your focus is clear'), findsOneWidget);
+    expect(
+      find.text('Nothing is asking for your attention right now.'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Pulse stays usable on narrow phones', (tester) async {
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final project = Project(
+      id: 'project',
+      userId: 'user',
+      name: 'A very long project name that must not overflow the focus card',
+      deadline: DateTime(2026, 9, 15),
+      createdAt: DateTime(2026, 9, 1),
+      updatedAt: DateTime(2026, 9, 12),
+    );
+    final task = Task(
+      id: 'task',
+      userId: 'user',
+      title: 'A long task title that should wrap safely on a narrow phone',
+      isCompleted: false,
+      sourceNoteId: 'note',
+      sourceLineIndex: 0,
+      projectId: project.id,
+      dueAt: DateTime(2026, 9, 13, 20),
+      estimatedMinutes: 125,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          projectsStreamProvider.overrideWith((ref) => Stream.value([project])),
+          tasksProvider.overrideWith((ref) => [task]),
+          currentUserSettingsProvider.overrideWith(
+            (ref) => Stream.value(UserSettings.defaults()),
+          ),
+          scheduleBlocksStreamProvider.overrideWith(
+            (ref) => Stream.value(const <ScheduleBlock>[]),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.build(),
+          home: Scaffold(
+            body: PulseScreen(
+              now: DateTime(2026, 9, 13, 9),
+              displayName: 'Tori',
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.text('Good morning, Tori'), findsOneWidget);
+    expect(find.text('Morning Pulse'), findsOneWidget);
+    expect(find.textContaining('A long task title'), findsOneWidget);
+    expect(find.byKey(const ValueKey('pulse-ask-jotcue')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('pulse-ask-jotcue')));
+    await tester.pumpAndSettle();
+    expect(find.text('Ask JotCue'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Daily Closing reviews unresolved planned work on narrow phones',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final pastBlock = ScheduleBlock(
+        id: 'past-block',
+        userId: 'user',
+        taskId: 'task-past',
+        title:
+            'A long planned work block that needs an explicit closing decision',
+        startsAt: DateTime(2026, 9, 13, 16),
+        endsAt: DateTime(2026, 9, 13, 17),
+        createdAt: DateTime(2026, 9, 12),
+        updatedAt: DateTime(2026, 9, 12),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            projectsStreamProvider.overrideWith(
+              (ref) => Stream.value(const <Project>[]),
+            ),
+            tasksProvider.overrideWith((ref) => const <Task>[]),
+            currentUserSettingsProvider.overrideWith(
+              (ref) => Stream.value(UserSettings.defaults()),
+            ),
+            scheduleBlocksStreamProvider.overrideWith(
+              (ref) => Stream.value([pastBlock]),
+            ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.build(),
+            home: Scaffold(body: PulseScreen(now: DateTime(2026, 9, 13, 19))),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.drag(
+        find.byKey(const ValueKey('pulse-screen-scroll')),
+        const Offset(0, -650),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Daily Closing'), findsOneWidget);
+      expect(find.textContaining('A long planned work block'), findsOneWidget);
+      expect(find.text('Completed'), findsWidgets);
+      expect(find.text('Missed'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
+}

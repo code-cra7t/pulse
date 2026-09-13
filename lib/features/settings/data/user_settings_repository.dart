@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../automation/models/automation_preferences.dart';
+import '../../scheduling/models/scheduling_preferences.dart';
 import '../models/user_settings.dart';
 
 class UserSettingsRepository {
@@ -46,6 +47,16 @@ class UserSettingsRepository {
 
   Future<void> updateSmartRemindersEnabled(String uid, bool enabled) {
     return _update(uid, {'smartRemindersEnabled': enabled});
+  }
+
+  Future<void> updateSchedulingPreferences(
+    String uid,
+    SchedulingPreferences preferences,
+  ) {
+    if (!preferences.isValid) {
+      throw ArgumentError('Scheduling preferences are invalid.');
+    }
+    return _update(uid, {'scheduling': preferences.toMap()});
   }
 
   Future<void> updateAutomationPreferences(

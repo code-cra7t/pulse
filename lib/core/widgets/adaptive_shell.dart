@@ -13,6 +13,7 @@ class AdaptiveShell extends StatelessWidget {
     required this.onDestinationSelected,
     this.desktopList,
     this.desktopEditor,
+    this.desktopWorkspace,
     this.onCreate,
     this.profileName,
     this.profileSubtitle,
@@ -25,6 +26,7 @@ class AdaptiveShell extends StatelessWidget {
   final Widget body;
   final Widget? desktopList;
   final Widget? desktopEditor;
+  final Widget? desktopWorkspace;
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
   final VoidCallback? onCreate;
@@ -115,16 +117,20 @@ class AdaptiveShell extends StatelessWidget {
                 onProfileTap: onProfileTap,
               ),
               const SizedBox(width: AppSpacing.sm),
-              SizedBox(
-                width: notesPanelWidth,
-                child: _WorkspacePanel(child: desktopList ?? body),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: _WorkspacePanel(
-                  child: desktopEditor ?? const SizedBox.shrink(),
+              if (desktopWorkspace != null)
+                Expanded(child: _WorkspacePanel(child: desktopWorkspace!))
+              else ...[
+                SizedBox(
+                  width: notesPanelWidth,
+                  child: _WorkspacePanel(child: desktopList ?? body),
                 ),
-              ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: _WorkspacePanel(
+                    child: desktopEditor ?? const SizedBox.shrink(),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -187,8 +193,8 @@ class _DesktopSidebar extends StatelessWidget {
 
   static const _destinations = <(IconData, String)>[
     (Icons.note_alt_rounded, 'Notes'),
-    (Icons.light_mode_outlined, 'Today'),
-    (Icons.notifications_none_rounded, 'Reminders'),
+    (Icons.bolt_outlined, 'Pulse'),
+    (Icons.view_week_outlined, 'Plan'),
     (Icons.settings_outlined, 'Settings'),
   ];
 

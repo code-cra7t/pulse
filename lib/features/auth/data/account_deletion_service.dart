@@ -4,8 +4,11 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/offline/offline_note_store.dart';
+import '../../../core/offline/offline_project_store.dart';
+import '../../../core/offline/offline_schedule_block_store.dart';
 import '../../../core/services/calendar_event_service.dart';
 import '../../../core/services/local_notifications_service.dart';
+import '../../calendar/data/device_schedule_calendar_service.dart';
 
 class AccountDeletionService {
   AccountDeletionService(
@@ -13,9 +16,13 @@ class AccountDeletionService {
     this._firestore,
     this._storage,
     this._notifications,
-    this._offlineNotes, {
+    this._offlineNotes,
+    this._offlineProjects,
+    this._offlineScheduleBlocks, {
     CalendarEventService? calendar,
-  }) : _calendar = calendar ?? CalendarEventService();
+    DeviceScheduleCalendarService? scheduleCalendar,
+  }) : _calendar = calendar ?? CalendarEventService(),
+       _scheduleCalendar = scheduleCalendar ?? DeviceScheduleCalendarService();
 
   static const int _batchSize = 400;
 
@@ -24,7 +31,10 @@ class AccountDeletionService {
   final FirebaseStorage _storage;
   final LocalNotificationsService _notifications;
   final OfflineNoteStore _offlineNotes;
+  final OfflineProjectStore _offlineProjects;
+  final OfflineScheduleBlockStore _offlineScheduleBlocks;
   final CalendarEventService _calendar;
+  final DeviceScheduleCalendarService _scheduleCalendar;
 
   Future<void> deleteCurrentAccount({required String password}) async {
     final user = _auth.currentUser;
@@ -55,6 +65,9 @@ class AccountDeletionService {
     await _deleteQuery(
       _firestore.collection('notes').where('userId', isEqualTo: user.uid),
     );
+    await _deleteQuery(
+      _firestore.collection('projects').where('userId', isEqualTo: user.uid),
+    );
     await _firestore
         .collection('users')
         .doc(user.uid)
@@ -64,6 +77,13 @@ class AccountDeletionService {
     await _firestore.collection('users').doc(user.uid).delete();
 
     await _offlineNotes.clearUser(user.uid);
+    await _offlineProjects.clearUser(user.uid);
+    try {
+      await _scheduleCalendar.detachAllLinks();
+    } catch (error) {
+      debugPrint('[ScheduleCalendar] local link cleanup failed: $error');
+    }
+    await _offlineScheduleBlocks.clearUser(user.uid);
     await _notifications.cancelAllReminders();
     await user.delete();
   }

@@ -9,6 +9,7 @@ class Reminder {
     required this.userId,
     required this.noteId,
     required this.taskLineIndex,
+    this.taskId,
     this.title = '',
     required this.notePreview,
     required this.scheduledAt,
@@ -24,6 +25,7 @@ class Reminder {
   final String userId;
   final String noteId;
   final int? taskLineIndex;
+  final String? taskId;
   final String title;
   final String notePreview;
   final DateTime scheduledAt;
@@ -56,6 +58,7 @@ class Reminder {
       userId: data['userId'] as String? ?? '',
       noteId: data['noteId'] as String? ?? '',
       taskLineIndex: data['taskLineIndex'] as int?,
+      taskId: data['taskId'] as String?,
       title: data['title'] as String? ?? '',
       notePreview: data['notePreview'] as String? ?? '',
       scheduledAt:
@@ -74,6 +77,7 @@ class Reminder {
       'userId': userId,
       'noteId': noteId,
       'taskLineIndex': taskLineIndex,
+      'taskId': taskId,
       'title': title,
       'notePreview': notePreview,
       'scheduledAt': Timestamp.fromDate(scheduledAt),
@@ -91,6 +95,7 @@ class Reminder {
     String? userId,
     String? noteId,
     Object? taskLineIndex = _unsetTaskLineIndex,
+    Object? taskId = _unsetTaskId,
     String? title,
     String? notePreview,
     DateTime? scheduledAt,
@@ -108,6 +113,7 @@ class Reminder {
       taskLineIndex: identical(taskLineIndex, _unsetTaskLineIndex)
           ? this.taskLineIndex
           : taskLineIndex as int?,
+      taskId: identical(taskId, _unsetTaskId) ? this.taskId : taskId as String?,
       title: title ?? this.title,
       notePreview: notePreview ?? this.notePreview,
       scheduledAt: scheduledAt ?? this.scheduledAt,
@@ -125,4 +131,5 @@ class Reminder {
 }
 
 const _unsetTaskLineIndex = Object();
+const _unsetTaskId = Object();
 const _unsetRepeatInterval = Object();

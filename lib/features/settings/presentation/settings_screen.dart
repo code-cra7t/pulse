@@ -11,6 +11,7 @@ import '../../auth/providers/account_deletion_provider.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../notes/models/note_category.dart';
 import '../../profile/providers/user_profile_providers.dart';
+import '../../scheduling/presentation/widgets/scheduling_preferences_sheet.dart';
 import '../models/user_settings.dart';
 import '../providers/user_settings_providers.dart';
 import 'privacy_policy_screen.dart';
@@ -229,6 +230,28 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _SettingsSection(
+                    title: 'Planning',
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.calendar_view_week_outlined),
+                        title: const Text('Planning availability'),
+                        subtitle: Text(
+                          effectiveSettings.schedulingPreferences.isConfigured
+                              ? 'Controls when JotCue may suggest focused work.'
+                              : 'Set when JotCue is allowed to suggest focused work.',
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => _editSchedulingPreferences(
+                          context,
+                          ref,
+                          user.uid,
+                          effectiveSettings,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _SettingsSection(
                     title: 'Assistant',
                     children: [
                       ListTile(
@@ -317,6 +340,30 @@ class SettingsScreen extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  Future<void> _editSchedulingPreferences(
+    BuildContext context,
+    WidgetRef ref,
+    String userId,
+    UserSettings settings,
+  ) async {
+    final updated = await showSchedulingPreferencesSheet(
+      context: context,
+      initial: settings.schedulingPreferences,
+    );
+    if (updated == null || !context.mounted) {
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(userSettingsRepositoryProvider)
+          .updateSchedulingPreferences(userId, updated);
+    } catch (error) {
+      _showError(messenger, error);
+    }
   }
 
   Future<void> _editAutomationPreferences(
@@ -435,7 +482,7 @@ class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'This permanently deletes your notes, tasks, reminders, uploaded images, settings, and JotCue account. This cannot be undone.',
+                'This permanently deletes your notes, tasks, reminders, local planning blocks, uploaded images, settings, and JotCue account. This cannot be undone.',
               ),
               const SizedBox(height: AppSpacing.md),
               TextFormField(

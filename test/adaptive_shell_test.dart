@@ -29,7 +29,7 @@ void main() {
 
     expect(find.byType(FloatingBottomNav), findsOneWidget);
     expect(find.text('Main content'), findsOneWidget);
-    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Pulse'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
   });
 
@@ -37,8 +37,8 @@ void main() {
     await pumpShell(tester, 320);
 
     expect(find.byType(FloatingBottomNav), findsOneWidget);
-    expect(find.text('Today'), findsNothing);
-    expect(find.text('Reminders'), findsNothing);
+    expect(find.text('Pulse'), findsNothing);
+    expect(find.text('Plan'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -47,7 +47,7 @@ void main() {
 
     expect(find.byType(FloatingBottomNav), findsNothing);
     expect(find.text('Main content'), findsOneWidget);
-    expect(find.byTooltip('Today'), findsOneWidget);
+    expect(find.byTooltip('Pulse'), findsOneWidget);
     expect(find.text('Desktop editor'), findsNothing);
   });
 
@@ -56,9 +56,37 @@ void main() {
 
     expect(find.byType(FloatingBottomNav), findsNothing);
     expect(find.text('Notes'), findsOneWidget);
-    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Pulse'), findsOneWidget);
     expect(find.text('Desktop notes list'), findsOneWidget);
     expect(find.text('Desktop editor'), findsOneWidget);
+  });
+
+  testWidgets('desktop can show a single workspace beside the sidebar', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1400, 800);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AdaptiveShell(
+          selectedIndex: 2,
+          onDestinationSelected: (_) {},
+          onCreate: () {},
+          profileName: 'JotCue User',
+          body: const Center(child: Text('Mobile plan')),
+          desktopList: const Center(child: Text('Desktop notes list')),
+          desktopEditor: const Center(child: Text('Desktop editor')),
+          desktopWorkspace: const Center(child: Text('Plan workspace')),
+        ),
+      ),
+    );
+
+    expect(find.text('Plan workspace'), findsOneWidget);
+    expect(find.text('Desktop notes list'), findsNothing);
+    expect(find.text('Desktop editor'), findsNothing);
+    expect(find.text('Plan'), findsOneWidget);
   });
 
   testWidgets('minimum desktop width does not squeeze panes', (tester) async {
