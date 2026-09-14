@@ -15,6 +15,7 @@ import '../../capture/presentation/natural_language_capture_sheet.dart';
 import '../../planning/presentation/widgets/task_planning_sheet.dart';
 import '../../planning/providers/planning_providers.dart';
 import '../../personal_graph/providers/personal_graph_providers.dart';
+import '../../reasoning/data/contextual_reasoning_engine.dart';
 import '../../projects/models/project.dart';
 import '../../scheduling/models/replanning_overview.dart';
 import '../../scheduling/models/schedule_block.dart';
@@ -24,8 +25,10 @@ import '../../scheduling/providers/scheduling_providers.dart';
 import '../../projects/providers/project_providers.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/providers/task_providers.dart';
+import '../data/proactive_pulse_engine.dart';
 import '../models/daily_pulse_loop.dart';
 import '../models/pulse_overview.dart';
+import '../models/proactive_pulse.dart';
 
 class PulseScreen extends ConsumerWidget {
   const PulseScreen({
@@ -77,6 +80,24 @@ class PulseScreen extends ConsumerWidget {
       pulse: overview,
       blocks: scheduleBlocksAsync.asData?.value ?? const <ScheduleBlock>[],
       scheduling: scheduleAsync.asData?.value,
+      replanning: replanningAsync.asData?.value,
+    );
+    final reasoning = const ContextualReasoningEngine().reason(
+      now: currentTime,
+      tasks: tasks,
+      projects: projects,
+      blocks: scheduleBlocksAsync.asData?.value ?? const <ScheduleBlock>[],
+      scheduling: scheduleAsync.asData?.value,
+      replanning: replanningAsync.asData?.value,
+      dependencyAnalysis: dependencyAnalysis,
+      personalGraph: personalGraph,
+      pulse: overview,
+      dailyLoop: dailyLoop,
+    );
+    final proactive = const ProactivePulseEngine().build(
+      now: currentTime,
+      reasoning: reasoning,
+      loop: dailyLoop,
       replanning: replanningAsync.asData?.value,
     );
     final aiPreferences =
@@ -141,11 +162,13 @@ class PulseScreen extends ConsumerWidget {
                     overview: overview,
                     loop: dailyLoop,
                     now: currentTime,
+                    proactive: proactive,
                   ),
                   _PulseCapacity(state: scheduleAsync, onOpenPlan: onOpenPlan),
                   _PulseReplanningNotice(
                     state: replanningAsync,
                     onOpenPlan: onOpenPlan,
+                    proactive: proactive,
                   ),
                   if (projectsAsync.hasError) ...[
                     const SizedBox(height: AppSpacing.sm),
@@ -154,9 +177,9 @@ class PulseScreen extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.xl),
                   SectionHeader(
                     title: 'Focus',
-                    subtitle: overview.focusItems.isEmpty
-                        ? 'Nothing is asking for your attention right now.'
-                        : 'The strongest signals from your current plan.',
+                    subtitle: reasoning.primary == null
+                        ? proactive.focusMessage
+                        : '${reasoning.primary!.reasons.take(2).join(' · ')}.',
                     trailing: onOpenPlan == null
                         ? null
                         : TextButton(
@@ -191,6 +214,7 @@ class PulseScreen extends ConsumerWidget {
                     const SizedBox(height: AppSpacing.lg),
                     _DailyClosing(
                       loop: dailyLoop,
+                      proactive: proactive,
                       onOpenPlan: onOpenPlan,
                       onMarkCompleted: (block) => _setScheduleBlockStatus(
                         context,
@@ -210,13 +234,20 @@ class PulseScreen extends ConsumerWidget {
                       ),
                     ),
                   ],
-                  if (overview.cues.isNotEmpty) ...[
+                  if (overview.cues.isNotEmpty || proactive.hasBlockedWork) ...[
                     const SizedBox(height: AppSpacing.lg),
-                    const SectionHeader(
+                    SectionHeader(
                       title: 'Needs attention',
-                      subtitle: 'Small planning gaps worth resolving.',
+                      subtitle: proactive.attentionMessage,
                     ),
                     const SizedBox(height: AppSpacing.sm),
+                    if (proactive.blockedMessage != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                        child: _BlockedWorkCue(
+                          message: proactive.blockedMessage!,
+                        ),
+                      ),
                     ...overview.cues.map(
                       (cue) => Padding(
                         padding: const EdgeInsets.only(bottom: AppSpacing.xs),
@@ -476,10 +507,15 @@ class _PulseCapacity extends StatelessWidget {
 }
 
 class _PulseReplanningNotice extends StatelessWidget {
-  const _PulseReplanningNotice({required this.state, required this.onOpenPlan});
+  const _PulseReplanningNotice({
+    required this.state,
+    required this.onOpenPlan,
+    required this.proactive,
+  });
 
   final AsyncValue<ReplanningOverview> state;
   final VoidCallback? onOpenPlan;
+  final ProactivePulseSnapshot proactive;
 
   @override
   Widget build(BuildContext context) {
@@ -504,12 +540,15 @@ class _PulseReplanningNotice extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$count ${count == 1 ? 'schedule item needs' : 'schedule items need'} review',
+                    proactive.hasRecovery
+                        ? 'Recovery available'
+                        : '$count ${count == 1 ? 'schedule item needs' : 'schedule items need'} review',
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    'JotCue noticed a missed block, changed availability, calendar conflict, or deadline-capacity problem.',
+                    proactive.recoveryMessage ??
+                        'JotCue noticed a missed block, changed availability, calendar conflict, or deadline-capacity problem.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -533,11 +572,13 @@ class _DaySnapshot extends StatelessWidget {
     required this.overview,
     required this.loop,
     required this.now,
+    required this.proactive,
   });
 
   final PulseOverview overview;
   final DailyPulseLoop loop;
   final DateTime now;
+  final ProactivePulseSnapshot proactive;
 
   @override
   Widget build(BuildContext context) {
@@ -567,6 +608,14 @@ class _DaySnapshot extends StatelessWidget {
           Text(
             'Your day at a glance',
             style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            proactive.morningMessage,
+            key: const ValueKey('proactive-pulse-message'),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
           if (loop.upNextBlock != null) ...[
             const SizedBox(height: AppSpacing.sm),
@@ -659,12 +708,14 @@ class _UpNextLine extends StatelessWidget {
 class _DailyClosing extends StatelessWidget {
   const _DailyClosing({
     required this.loop,
+    required this.proactive,
     required this.onOpenPlan,
     required this.onMarkCompleted,
     required this.onMarkMissed,
   });
 
   final DailyPulseLoop loop;
+  final ProactivePulseSnapshot proactive;
   final VoidCallback? onOpenPlan;
   final ValueChanged<ScheduleBlock> onMarkCompleted;
   final ValueChanged<ScheduleBlock> onMarkMissed;
@@ -734,7 +785,11 @@ class _DailyClosing extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                _closingMessage(loop),
+                loop.unresolvedPastBlocks.isEmpty
+                    ? proactive.closingMessage
+                    : loop.unresolvedPastBlocks.length == 1
+                    ? 'The block below ended without a decision. Mark it completed or missed, or move it from Plan if it still belongs later.'
+                    : 'The blocks below ended without decisions. Mark each completed or missed, or move remaining work from Plan.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               if (loop.unresolvedPastBlocks.isNotEmpty) ...[
@@ -821,22 +876,6 @@ class _ClosingBlockRow extends StatelessWidget {
   }
 }
 
-String _closingMessage(DailyPulseLoop loop) {
-  if (loop.todayBlocks.isEmpty) {
-    return 'Nothing was planned in JotCue today. You can still review open work in Plan before calling it a day.';
-  }
-  if (loop.unresolvedCount > 0) {
-    return '${loop.unresolvedCount} ${loop.unresolvedCount == 1 ? 'past block still needs' : 'past blocks still need'} a decision. Mark the work completed or missed; move it from Plan if it still belongs later.';
-  }
-  if (loop.upcomingCount > 0) {
-    return '${loop.upcomingCount} ${loop.upcomingCount == 1 ? 'planned block remains' : 'planned blocks remain'} today. Completed work already counts toward future scheduling.';
-  }
-  if (loop.completedCount > 0 && loop.missedCount == 0) {
-    return 'Everything you planned in JotCue today has been closed out.';
-  }
-  return 'Today is accounted for. Review tomorrow in Plan if anything needs a new home.';
-}
-
 class _SnapshotMetric extends StatelessWidget {
   const _SnapshotMetric({required this.value, required this.label});
 
@@ -852,6 +891,40 @@ class _SnapshotMetric extends StatelessWidget {
         const SizedBox(height: 2),
         Text(label, style: Theme.of(context).textTheme.bodySmall),
       ],
+    );
+  }
+}
+
+class _BlockedWorkCue extends StatelessWidget {
+  const _BlockedWorkCue({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      color: AppColors.sky,
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.pause_circle_outline_rounded, size: 22),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Blocked work can wait',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 3),
+                Text(message, style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

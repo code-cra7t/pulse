@@ -193,3 +193,17 @@ Trusted automation rules:
 - When evidence is incomplete, expose a limitation or lower confidence instead of pretending certainty.
 - Alternatives must also be currently actionable; do not recommend blocked work merely to provide a second option.
 - Patch 29 adds reasoning only. It does not broaden Ask JotCue action types, Trusted automation eligibility, Hybrid AI authority, background execution, or multi-step agency.
+
+## Patch 30 Proactive Pulse 2.0 guardrails
+- Proactive Pulse is a presentation layer over existing deterministic planning and contextual-reasoning state. It must not become a second reasoning, scheduling, or mutation engine.
+- Fresh proactive recommendations must be derived from current local state at render/reconciliation time. Do not persist recommendation text as a new source of truth.
+- Morning Pulse may surface the strongest contextual next action, why it matters, a deterministic execution window, relevant blocked-work context, and recovery guidance.
+- Daily Closing may summarize completed, missed, unresolved, slipped, and recoverable work using current scheduling and contextual-reasoning state.
+- Do not fabricate schedule windows, recovery times, blockers, deadlines, or availability. Timing guidance must come from accepted blocks, current proposals, explicit replanning suggestions, or real free availability.
+- Blocked work may be surfaced as context, but it must not be promoted as the best next action.
+- Avoid duplicating the same task or schedule-block title in adjacent Pulse surfaces when the surrounding context already makes the target clear.
+- Repeating OS notifications must not contain contextual recommendations that can become stale across future recurrence. Keep recurring Morning Pulse and Daily Closing notification copy generic unless a future delivery model regenerates each notification from fresh state.
+- Existing notification IDs, quiet-hour behavior, throttling, destinations, and delivery semantics must remain unchanged unless a dedicated notification migration is explicitly designed.
+- Proactive Pulse must not introduce new autonomous mutation authority. Any assistant-proposed mutation must continue through the existing typed proposal, policy, approval, audit, and executor path.
+- Explicit manual schedule review controls such as recording a past block as Completed or Missed remain user-driven review actions and must not be silently triggered by proactive reasoning.
+- Patch 30 does not broaden Hybrid AI access, Personal Graph extraction, Trusted automation eligibility, background execution, or multi-step agency.
