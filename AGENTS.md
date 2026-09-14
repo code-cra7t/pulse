@@ -207,3 +207,20 @@ Trusted automation rules:
 - Proactive Pulse must not introduce new autonomous mutation authority. Any assistant-proposed mutation must continue through the existing typed proposal, policy, approval, audit, and executor path.
 - Explicit manual schedule review controls such as recording a past block as Completed or Missed remain user-driven review actions and must not be silently triggered by proactive reasoning.
 - Patch 30 does not broaden Hybrid AI access, Personal Graph extraction, Trusted automation eligibility, background execution, or multi-step agency.
+
+## Patch 31 Multi-step Agency guardrails
+- Multi-step Agency composes existing typed Ask JotCue actions; it must not introduce a second mutation system or bypass the existing action executor.
+- A multi-step plan must contain between 2 and 5 explicit steps. Larger requests must be split into smaller reviewed plans.
+- Local multi-step parsing must require explicit sequence intent such as `First ..., then ...`. Ordinary prose containing words like `then` must not be reinterpreted as an action plan.
+- Every plan step must independently resolve to an existing supported `AskJotCueActionProposal`. Unsupported, ambiguous, duplicate, ownerless, or cross-account steps fail closed before the plan is executable.
+- The entire plan must be visible to the user before execution. A plan must never begin applying while it is still being constructed or interpreted.
+- Observe exposes no executable plan. Suggest may show the complete plan but cannot apply it.
+- Approval and Trusted levels still require one explicit `Apply plan` confirmation for the displayed plan. Patch 31 does not introduce unattended plan execution.
+- Automation policy must be preflighted across every plan step before step 1 runs. If any step is not executable under the current permission level, no step may begin.
+- Execution is sequential. Each step continues through the existing action executor and its local validation rather than relying only on plan-time validation.
+- Stop immediately on the first failed or stale step. Later steps must not run after a failure.
+- Multi-step execution is not transactional. If earlier steps succeeded before a later failure, report the plan as partially applied and never claim those successful mutations were rolled back.
+- A failed or partially applied plan must not be blindly resumed from the old preview. The user must ask again so remaining work is rebuilt against fresh local state.
+- Existing per-action safety rules remain authoritative, including schedule freshness, calendar-link checks, availability checks, capture approval requirements, metadata validation, and source-of-truth rules.
+- Hybrid AI must not return or execute remote-generated multi-action chains in Patch 31. The existing remote gateway remains limited to one allow-listed tool suggestion, which is rebuilt and validated locally.
+- Multi-step Agency must not broaden Trusted automation eligibility, background execution, Personal Graph write authority, notification authority, or persistence of assistant conversations/plans.

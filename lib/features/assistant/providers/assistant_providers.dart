@@ -11,6 +11,7 @@ import '../../tasks/providers/task_providers.dart';
 import '../data/ai_gateway_client.dart';
 import '../data/ask_jotcue_action_executor.dart';
 import '../data/ask_jotcue_engine.dart';
+import '../data/ask_jotcue_plan_executor.dart';
 import '../data/hybrid_ask_jotcue_service.dart';
 import '../models/ai_assistant_preferences.dart';
 
@@ -105,5 +106,11 @@ final askJotCueActionExecutorProvider = Provider<AskJotCueActionExecutor>((
                 !endsAt.isAfter(slot.endsAt),
           );
         },
+  );
+});
+
+final askJotCuePlanExecutorProvider = Provider<AskJotCuePlanExecutor>((ref) {
+  return AskJotCuePlanExecutor(
+    actionExecutor: ref.watch(askJotCueActionExecutorProvider),
   );
 });

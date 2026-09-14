@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/app_theme.dart';
 import '../../automation/data/automation_policy.dart';
+import '../../automation/models/automation_preferences.dart';
 import '../../automation/providers/automation_providers.dart';
 import '../../pulse/models/daily_pulse_loop.dart';
 import '../../pulse/models/pulse_overview.dart';
@@ -53,6 +54,8 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
   late AskJotCueContext _assistantContext;
   final Set<String> _runningActionIds = <String>{};
   final Set<String> _completedActionIds = <String>{};
+  final Set<String> _runningPlanIds = <String>{};
+  final Set<String> _finishedPlanIds = <String>{};
   bool _isAnswering = false;
   final List<AskJotCueMessage> _messages = [
     const AskJotCueMessage(
@@ -152,24 +155,32 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
                 itemBuilder: (context, index) {
                   final message = _messages[index];
                   final proposal = message.actionProposal;
-                  final decision = proposal == null
-                      ? null
-                      : policy.evaluate(
+                  final plan = message.actionPlan;
+                  final decision = proposal != null
+                      ? policy.evaluate(
                           preferences: preferences,
                           action: _policyActionFor(proposal.kind),
-                        );
+                        )
+                      : plan != null
+                      ? _decisionForPlan(policy, preferences, plan)
+                      : null;
+                  final isPlan = plan != null;
                   return _MessageBubble(
                     message: message,
                     decision: decision,
-                    isRunning:
-                        proposal != null &&
-                        _runningActionIds.contains(proposal.id),
-                    isCompleted:
-                        proposal != null &&
-                        _completedActionIds.contains(proposal.id),
-                    onApply: proposal == null
-                        ? null
-                        : () => _applyAction(proposal),
+                    isRunning: isPlan
+                        ? _runningPlanIds.contains(plan.id)
+                        : proposal != null &&
+                              _runningActionIds.contains(proposal.id),
+                    isCompleted: isPlan
+                        ? _finishedPlanIds.contains(plan.id)
+                        : proposal != null &&
+                              _completedActionIds.contains(proposal.id),
+                    onApply: proposal != null
+                        ? () => _applyAction(proposal)
+                        : plan != null
+                        ? () => _applyPlan(plan)
+                        : null,
                   );
                 },
               ),
@@ -251,21 +262,25 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
           );
       if (!mounted) return;
       var proposal = answer.actionProposal;
+      var plan = answer.actionPlan;
       var answerText = answer.title == null
           ? answer.text
           : '${answer.title}\n${answer.text}';
 
-      if (proposal != null) {
-        final decision = ref
-            .read(automationPolicyProvider)
-            .evaluate(
-              preferences: ref.read(automationPreferencesProvider),
-              action: _policyActionFor(proposal.kind),
-            );
+      if (proposal != null || plan != null) {
+        final policy = ref.read(automationPolicyProvider);
+        final preferences = ref.read(automationPreferencesProvider);
+        final decision = proposal != null
+            ? policy.evaluate(
+                preferences: preferences,
+                action: _policyActionFor(proposal.kind),
+              )
+            : _decisionForPlan(policy, preferences, plan!);
         if (decision == AutomationDecision.observeOnly) {
           answerText =
               'Observe mode\nI understood the requested change, but Observe mode does not prepare assistant actions. Change Assistant permissions in Settings if you want JotCue to suggest or apply changes.';
           proposal = null;
+          plan = null;
         }
       }
 
@@ -276,6 +291,7 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
             text: answerText,
             isUser: false,
             actionProposal: proposal,
+            actionPlan: plan,
             usedRemoteAi: answer.usedRemoteAi,
           ),
         );
@@ -327,6 +343,46 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
         _messages.add(
           AskJotCueMessage(
             text: 'I did not apply that change: $error',
+            isUser: false,
+          ),
+        );
+      });
+      _scrollToEnd();
+    }
+  }
+
+  Future<void> _applyPlan(AskJotCueActionPlan plan) async {
+    if (_runningPlanIds.contains(plan.id) ||
+        _finishedPlanIds.contains(plan.id)) {
+      return;
+    }
+    setState(() => _runningPlanIds.add(plan.id));
+    try {
+      final result = await ref
+          .read(askJotCuePlanExecutorProvider)
+          .execute(
+            preferences: ref.read(automationPreferencesProvider),
+            plan: plan,
+            now: DateTime.now(),
+            approved: true,
+          );
+      if (!mounted) return;
+      setState(() {
+        _runningPlanIds.remove(plan.id);
+        _finishedPlanIds.add(plan.id);
+        for (final proposal in result.succeededProposals) {
+          _applyProposalLocally(proposal);
+        }
+        _messages.add(AskJotCueMessage(text: result.summary, isUser: false));
+      });
+      _scrollToEnd();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _runningPlanIds.remove(plan.id);
+        _messages.add(
+          AskJotCueMessage(
+            text: 'I did not start that plan: $error',
             isUser: false,
           ),
         );
@@ -474,6 +530,7 @@ class _MessageBubble extends StatelessWidget {
         : Theme.of(context).colorScheme.surfaceContainerHighest;
     final maxWidth = MediaQuery.sizeOf(context).width * 0.82;
     final proposal = message.actionProposal;
+    final plan = message.actionPlan;
 
     return Align(
       alignment: alignment,
@@ -512,11 +569,111 @@ class _MessageBubble extends StatelessWidget {
                     isCompleted: isCompleted,
                     onApply: onApply,
                   ),
+                ] else if (plan != null) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  _ActionPlanPreviewCard(
+                    plan: plan,
+                    decision: decision!,
+                    isRunning: isRunning,
+                    isFinished: isCompleted,
+                    onApply: onApply,
+                  ),
                 ],
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ActionPlanPreviewCard extends StatelessWidget {
+  const _ActionPlanPreviewCard({
+    required this.plan,
+    required this.decision,
+    required this.isRunning,
+    required this.isFinished,
+    required this.onApply,
+  });
+
+  final AskJotCueActionPlan plan;
+  final AutomationDecision decision;
+  final bool isRunning;
+  final bool isFinished;
+  final VoidCallback? onApply;
+
+  @override
+  Widget build(BuildContext context) {
+    final canApply =
+        !isRunning &&
+        !isFinished &&
+        (decision == AutomationDecision.requiresApproval ||
+            decision == AutomationDecision.trustedEligible);
+    final status = switch (decision) {
+      AutomationDecision.observeOnly => 'Observe only',
+      AutomationDecision.suggestOnly => 'Suggestion only',
+      AutomationDecision.requiresApproval => 'Requires your approval',
+      AutomationDecision.trustedEligible =>
+        'Trusted permission · still waits for this plan confirmation',
+    };
+    final buttonLabel = isFinished
+        ? 'Finished'
+        : isRunning
+        ? 'Applying…'
+        : decision == AutomationDecision.suggestOnly
+        ? 'Suggestion only'
+        : 'Apply plan';
+
+    return Container(
+      key: ValueKey('ask-jotcue-plan-${plan.id}'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            plan.previewTitle,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 4),
+          Text(plan.previewText, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: AppSpacing.sm),
+          for (var index = 0; index < plan.steps.length; index++) ...[
+            Text(
+              '${index + 1}. ${plan.steps[index].previewTitle}',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              plan.steps[index].previewText,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            if (index != plan.steps.length - 1)
+              const SizedBox(height: AppSpacing.xs),
+          ],
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            status,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.tonal(
+              key: ValueKey('ask-jotcue-apply-plan-${plan.id}'),
+              onPressed: canApply ? onApply : null,
+              child: Text(buttonLabel),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -597,6 +754,32 @@ class _ActionPreviewCard extends StatelessWidget {
       ),
     );
   }
+}
+
+AutomationDecision _decisionForPlan(
+  AutomationPolicy policy,
+  AutomationPreferences preferences,
+  AskJotCueActionPlan plan,
+) {
+  var requiresApproval = false;
+  for (final proposal in plan.steps) {
+    final decision = policy.evaluate(
+      preferences: preferences,
+      action: _policyActionFor(proposal.kind),
+    );
+    if (decision == AutomationDecision.observeOnly) {
+      return AutomationDecision.observeOnly;
+    }
+    if (decision == AutomationDecision.suggestOnly) {
+      return AutomationDecision.suggestOnly;
+    }
+    if (decision == AutomationDecision.requiresApproval) {
+      requiresApproval = true;
+    }
+  }
+  return requiresApproval
+      ? AutomationDecision.requiresApproval
+      : AutomationDecision.trustedEligible;
 }
 
 AutomationActionKind _policyActionFor(AskJotCueActionKind kind) {

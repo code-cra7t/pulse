@@ -138,12 +138,27 @@ class AskJotCueActionProposal {
   final String? noteText;
 }
 
+class AskJotCueActionPlan {
+  const AskJotCueActionPlan({
+    required this.id,
+    required this.steps,
+    required this.previewTitle,
+    required this.previewText,
+  });
+
+  final String id;
+  final List<AskJotCueActionProposal> steps;
+  final String previewTitle;
+  final String previewText;
+}
+
 class AskJotCueAnswer {
   const AskJotCueAnswer({
     required this.intent,
     required this.text,
     this.title,
     this.actionProposal,
+    this.actionPlan,
     this.usedRemoteAi = false,
   });
 
@@ -151,6 +166,7 @@ class AskJotCueAnswer {
   final String? title;
   final String text;
   final AskJotCueActionProposal? actionProposal;
+  final AskJotCueActionPlan? actionPlan;
   final bool usedRemoteAi;
 }
 
@@ -159,12 +175,14 @@ class AskJotCueMessage {
     required this.text,
     required this.isUser,
     this.actionProposal,
+    this.actionPlan,
     this.usedRemoteAi = false,
   });
 
   final String text;
   final bool isUser;
   final AskJotCueActionProposal? actionProposal;
+  final AskJotCueActionPlan? actionPlan;
   final bool usedRemoteAi;
 }
 

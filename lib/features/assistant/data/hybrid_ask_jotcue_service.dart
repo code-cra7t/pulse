@@ -2,6 +2,7 @@ import 'ai_context_minimizer.dart';
 import 'ai_gateway_client.dart';
 import 'ai_tool_proposal_adapter.dart';
 import 'ask_jotcue_engine.dart';
+import 'ask_jotcue_plan_builder.dart';
 import '../models/ai_assistant_preferences.dart';
 import '../models/ask_jotcue.dart';
 
@@ -26,6 +27,13 @@ class HybridAskJotCueService {
     required AskJotCueContext context,
     required AiAssistantPreferences preferences,
   }) async {
+    final localPlan = AskJotCuePlanBuilder(
+      engine: _localEngine,
+    ).build(query: query, context: context);
+    if (localPlan != null) {
+      return localPlan;
+    }
+
     final local = _localEngine.answer(query: query, context: context);
     if (local.intent != AskJotCueIntent.unknown ||
         !preferences.usesRemoteGateway ||

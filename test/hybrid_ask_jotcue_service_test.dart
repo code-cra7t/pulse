@@ -234,6 +234,31 @@ void main() {
     expect(answer.actionProposal?.kind, AskJotCueActionKind.taskCompletion);
   });
 
+  test(
+    'explicit multi-step plan stays local even when Hybrid is enabled',
+    () async {
+      final gateway = _FakeGateway(
+        response: const AiGatewayResponse(answer: 'Should not be used'),
+      );
+      final service = HybridAskJotCueService(
+        localEngine: const AskJotCueEngine(),
+        gateway: gateway,
+      );
+
+      final answer = await service.answer(
+        query:
+            'First mark Revise chapter 4 done, then set Revise chapter 4 priority to high',
+        context: context,
+        preferences: const AiAssistantPreferences(mode: AiAssistantMode.hybrid),
+      );
+
+      expect(gateway.calls, 0);
+      expect(answer.usedRemoteAi, isFalse);
+      expect(answer.actionProposal, isNull);
+      expect(answer.actionPlan?.steps, hasLength(2));
+    },
+  );
+
   test('malformed or unsupported tool fails closed without action', () async {
     final gateway = _FakeGateway(
       response: const AiGatewayResponse(

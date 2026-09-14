@@ -214,6 +214,69 @@ void main() {
     },
   );
 
+  testWidgets('suggest mode shows a bounded multi-step plan preview', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(432, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final tasks = [
+      Task(
+        id: 'chapter',
+        userId: 'user',
+        title: 'Revise chapter 4',
+        isCompleted: false,
+        sourceNoteId: 'note-1',
+        sourceLineIndex: 0,
+      ),
+      Task(
+        id: 'summary',
+        userId: 'user',
+        title: 'Write summary',
+        isCompleted: false,
+        sourceNoteId: 'note-2',
+        sourceLineIndex: 0,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          automationPreferencesProvider.overrideWith(
+            (ref) =>
+                const AutomationPreferences(level: AutomationLevel.suggest),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.build(),
+          home: Scaffold(
+            body: AskJotCueSheet(
+              assistantContext: assistantContext(tasks: tasks),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey('ask-jotcue-field')),
+      'First mark Revise chapter 4 done, then set Write summary priority to high',
+    );
+    await tester.tap(find.byKey(const ValueKey('ask-jotcue-send')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Multi-step plan preview'), findsOneWidget);
+    expect(find.text('2-step plan'), findsOneWidget);
+    expect(find.text('1. Mark complete'), findsOneWidget);
+    expect(find.text('2. Change priority'), findsOneWidget);
+    final button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Suggestion only'),
+    );
+    expect(button.onPressed, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('observe mode explains boundary without exposing action card', (
     tester,
   ) async {
