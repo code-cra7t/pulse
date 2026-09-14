@@ -168,3 +168,15 @@ Trusted automation rules:
 - Resolve Task and Project names conservatively. Ambiguous or missing names must fail closed instead of guessing. Prerequisite IDs must resolve to current Tasks, self-dependencies are forbidden, and the existing Task service remains responsible for missing-dependency/cycle validation at execution time.
 - Hybrid planning output is untrusted. Accept only allow-listed planning tools, resolve all IDs against current local state, rebuild a local `AskJotCueActionProposal`, and pass execution through the same automation policy and Task service.
 - Keep `waitingFor` text bounded and explicit. Do not infer or persist people/entities beyond the text the user supplied; Personal Graph entity extraction belongs to a later patch.
+
+## Patch 28 Personal Graph 2.0 guardrails
+- The Personal Graph remains a derived, in-memory read model. Do not persist or sync graph nodes or edges as a separate source of truth.
+- Person, Decision, and Event nodes may be created only from explicit structured facts in existing user-owned source data. Patch 28 must not infer entities from ordinary Note prose.
+- Supported explicit Note markers are reviewable/editable at their source, including `Person:` / `People:`, `Decision:`, and `Event:` forms.
+- Ordinary prose must never create Person, Decision, or Event graph nodes merely because it appears to mention an entity or occurrence.
+- Derived relationship edges may connect explicit facts to their source Note and, where unambiguous, to existing Tasks and Projects.
+- Never guess a Project relationship. If a source Note resolves through Tasks to zero or multiple Projects, omit the Project-specific relationship rather than choosing one.
+- Person identity normalization must remain deterministic and conservative. Do not silently merge distinct people based on fuzzy similarity.
+- Event dates must come from explicit user-authored structured input. Do not manufacture dates from surrounding prose.
+- Existing Notes, Tasks, Projects, deadlines, dependencies, and schedule blocks remain authoritative. Removing or editing the source fact must naturally change the next derived graph build.
+- Patch 28 does not broaden Hybrid AI, Trusted automation, background execution, or Ask JotCue mutation permissions.

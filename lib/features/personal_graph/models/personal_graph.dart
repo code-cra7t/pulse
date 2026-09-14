@@ -12,9 +12,14 @@ enum PersonalGraphNodeType {
 enum PersonalGraphEdgeType {
   originatedFromNote,
   belongsToProject,
+  relatesToProject,
   hasDeadline,
   scheduledAs,
   dependsOnTask,
+  referencesPerson,
+  involvesPerson,
+  recordsDecision,
+  recordsEvent,
 }
 
 enum PersonalGraphIntegrityIssueType {
@@ -80,6 +85,7 @@ class PersonalGraphTaskContext {
     this.deadline,
     this.scheduleBlocks = const <PersonalGraphNode>[],
     this.prerequisiteTasks = const <PersonalGraphNode>[],
+    this.people = const <PersonalGraphNode>[],
     this.integrityIssues = const <PersonalGraphIntegrityIssue>[],
   });
 
@@ -89,6 +95,7 @@ class PersonalGraphTaskContext {
   final PersonalGraphNode? deadline;
   final List<PersonalGraphNode> scheduleBlocks;
   final List<PersonalGraphNode> prerequisiteTasks;
+  final List<PersonalGraphNode> people;
   final List<PersonalGraphIntegrityIssue> integrityIssues;
 
   bool get hasRelatedContext =>
@@ -97,6 +104,7 @@ class PersonalGraphTaskContext {
       deadline != null ||
       scheduleBlocks.isNotEmpty ||
       prerequisiteTasks.isNotEmpty ||
+      people.isNotEmpty ||
       integrityIssues.isNotEmpty;
 
   PersonalGraphNode? nextScheduleBlock(DateTime now) {
@@ -188,6 +196,13 @@ class PersonalGraph {
             .whereType<PersonalGraphNode>()
             .toList(growable: false);
 
+    final peopleNodes =
+        outgoing(taskNode.id, type: PersonalGraphEdgeType.involvesPerson)
+            .map((edge) => nodes[edge.toNodeId])
+            .whereType<PersonalGraphNode>()
+            .toList()
+          ..sort((a, b) => a.label.compareTo(b.label));
+
     final taskIssues = integrityIssues
         .where((issue) => issue.entityId == taskId)
         .toList(growable: false);
@@ -199,6 +214,7 @@ class PersonalGraph {
       deadline: target(PersonalGraphEdgeType.hasDeadline),
       scheduleBlocks: scheduleNodes,
       prerequisiteTasks: prerequisiteNodes,
+      people: peopleNodes,
       integrityIssues: taskIssues,
     );
   }

@@ -3,9 +3,12 @@ import '../../projects/models/project.dart';
 import '../../scheduling/models/schedule_block.dart';
 import '../../tasks/models/task.dart';
 import '../models/personal_graph.dart';
+import 'explicit_graph_fact_parser.dart';
 
 class PersonalGraphBuilder {
   const PersonalGraphBuilder();
+
+  static const _factParser = ExplicitGraphFactParser();
 
   PersonalGraph build({
     required List<Note> notes,
@@ -20,6 +23,22 @@ class PersonalGraphBuilder {
     final noteById = {for (final note in notes) note.id: note};
     final taskById = {for (final task in tasks) task.id: task};
     final projectById = {for (final project in projects) project.id: project};
+    final factsByNoteId = {
+      for (final note in notes) note.id: _factParser.parse(note),
+    };
+    final projectIdsByNote = <String, Set<String>>{};
+    for (final task in tasks) {
+      final projectId = task.projectId;
+      if (task.sourceNoteId.isEmpty ||
+          projectId == null ||
+          projectId.isEmpty ||
+          !projectById.containsKey(projectId)) {
+        continue;
+      }
+      projectIdsByNote
+          .putIfAbsent(task.sourceNoteId, () => <String>{})
+          .add(projectId);
+    }
 
     for (final note in notes) {
       _putNode(
@@ -31,6 +50,86 @@ class PersonalGraphBuilder {
           label: _noteLabel(note),
         ),
       );
+
+      final facts = factsByNoteId[note.id]!;
+      final noteNodeId = PersonalGraph.nodeId(
+        PersonalGraphNodeType.note,
+        note.id,
+      );
+
+      for (final person in facts.people) {
+        final personNode = PersonalGraphNode(
+          id: PersonalGraph.nodeId(
+            PersonalGraphNodeType.person,
+            person.entityId,
+          ),
+          type: PersonalGraphNodeType.person,
+          entityId: person.entityId,
+          label: person.label,
+        );
+        _putNode(nodes, personNode);
+        _addUniqueEdge(
+          edges,
+          _edge(
+            fromNodeId: noteNodeId,
+            toNodeId: personNode.id,
+            type: PersonalGraphEdgeType.referencesPerson,
+          ),
+        );
+      }
+
+      for (final decision in facts.decisions) {
+        final decisionNode = PersonalGraphNode(
+          id: PersonalGraph.nodeId(
+            PersonalGraphNodeType.decision,
+            decision.entityId,
+          ),
+          type: PersonalGraphNodeType.decision,
+          entityId: decision.entityId,
+          label: decision.label,
+        );
+        _putNode(nodes, decisionNode);
+        _addUniqueEdge(
+          edges,
+          _edge(
+            fromNodeId: noteNodeId,
+            toNodeId: decisionNode.id,
+            type: PersonalGraphEdgeType.recordsDecision,
+          ),
+        );
+      }
+
+      for (final event in facts.events) {
+        final eventNode = PersonalGraphNode(
+          id: PersonalGraph.nodeId(PersonalGraphNodeType.event, event.entityId),
+          type: PersonalGraphNodeType.event,
+          entityId: event.entityId,
+          label: event.label,
+          startsAt: event.startsAt,
+        );
+        _putNode(nodes, eventNode);
+        _addUniqueEdge(
+          edges,
+          _edge(
+            fromNodeId: noteNodeId,
+            toNodeId: eventNode.id,
+            type: PersonalGraphEdgeType.recordsEvent,
+          ),
+        );
+        for (final person in facts.people) {
+          _addUniqueEdge(
+            edges,
+            _edge(
+              fromNodeId: eventNode.id,
+              toNodeId: PersonalGraph.nodeId(
+                PersonalGraphNodeType.person,
+                person.entityId,
+              ),
+              type: PersonalGraphEdgeType.involvesPerson,
+            ),
+          );
+        }
+      }
     }
 
     for (final project in projects) {
@@ -109,6 +208,23 @@ class PersonalGraphBuilder {
         );
       }
 
+      final sourceFacts = factsByNoteId[task.sourceNoteId];
+      if (sourceFacts != null) {
+        for (final person in sourceFacts.people) {
+          _addUniqueEdge(
+            edges,
+            _edge(
+              fromNodeId: taskNodeId,
+              toNodeId: PersonalGraph.nodeId(
+                PersonalGraphNodeType.person,
+                person.entityId,
+              ),
+              type: PersonalGraphEdgeType.involvesPerson,
+            ),
+          );
+        }
+      }
+
       final projectId = task.projectId;
       if (projectId != null && projectId.isNotEmpty) {
         if (projectById.containsKey(projectId)) {
@@ -175,6 +291,60 @@ class PersonalGraphBuilder {
       }
     }
 
+    for (final note in notes) {
+      final projectIds = projectIdsByNote[note.id];
+      if (projectIds == null || projectIds.length != 1) continue;
+
+      final projectId = projectIds.single;
+      final projectNodeId = PersonalGraph.nodeId(
+        PersonalGraphNodeType.project,
+        projectId,
+      );
+      final facts = factsByNoteId[note.id]!;
+
+      for (final person in facts.people) {
+        _addUniqueEdge(
+          edges,
+          _edge(
+            fromNodeId: projectNodeId,
+            toNodeId: PersonalGraph.nodeId(
+              PersonalGraphNodeType.person,
+              person.entityId,
+            ),
+            type: PersonalGraphEdgeType.involvesPerson,
+          ),
+        );
+      }
+
+      for (final decision in facts.decisions) {
+        _addUniqueEdge(
+          edges,
+          _edge(
+            fromNodeId: PersonalGraph.nodeId(
+              PersonalGraphNodeType.decision,
+              decision.entityId,
+            ),
+            toNodeId: projectNodeId,
+            type: PersonalGraphEdgeType.belongsToProject,
+          ),
+        );
+      }
+
+      for (final event in facts.events) {
+        _addUniqueEdge(
+          edges,
+          _edge(
+            fromNodeId: PersonalGraph.nodeId(
+              PersonalGraphNodeType.event,
+              event.entityId,
+            ),
+            toNodeId: projectNodeId,
+            type: PersonalGraphEdgeType.relatesToProject,
+          ),
+        );
+      }
+    }
+
     for (final block in scheduleBlocks) {
       final blockNode = PersonalGraphNode(
         id: PersonalGraph.nodeId(PersonalGraphNodeType.scheduleBlock, block.id),
@@ -220,6 +390,11 @@ class PersonalGraphBuilder {
 
   void _putNode(Map<String, PersonalGraphNode> nodes, PersonalGraphNode node) {
     nodes[node.id] = node;
+  }
+
+  void _addUniqueEdge(List<PersonalGraphEdge> edges, PersonalGraphEdge edge) {
+    if (edges.any((existing) => existing.id == edge.id)) return;
+    edges.add(edge);
   }
 
   PersonalGraphNode _deadlineNode({
