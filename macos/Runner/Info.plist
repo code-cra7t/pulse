@@ -41,6 +41,10 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>JotCue uses the microphone only while you explicitly use voice input.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>JotCue turns speech you explicitly record into an editable Ask JotCue transcript.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>

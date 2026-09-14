@@ -224,3 +224,18 @@ Trusted automation rules:
 - Existing per-action safety rules remain authoritative, including schedule freshness, calendar-link checks, availability checks, capture approval requirements, metadata validation, and source-of-truth rules.
 - Hybrid AI must not return or execute remote-generated multi-action chains in Patch 31. The existing remote gateway remains limited to one allow-listed tool suggestion, which is rebuilt and validated locally.
 - Multi-step Agency must not broaden Trusted automation eligibility, background execution, Personal Graph write authority, notification authority, or persistence of assistant conversations/plans.
+
+## Patch 32 Voice guardrails
+- Voice input is explicit push-to-talk only. Do not add always-listening, wake-word, background microphone, or passive audio capture behavior.
+- Voice recognition produces an editable transcript only. Speech must never directly execute an Ask JotCue action, plan, capture, schedule change, or other mutation.
+- The transcript must enter the same existing Ask JotCue text path: deterministic parsing first, then the normal preview, automation-policy checks, explicit Apply confirmation, and existing action executor.
+- Do not auto-submit recognized speech. The user must be able to inspect and edit the transcript before pressing Send.
+- Disable normal Ask JotCue submission while recognition is actively listening so partial speech cannot be submitted accidentally.
+- Prefer on-device speech recognition where the platform and installed language support it. Do not promise offline recognition when the operating system cannot provide it.
+- If on-device recognition is unavailable, fail closed rather than silently switching to a network-backed recognizer. A system/browser speech fallback must be separately disclosed and explicitly approved by the user.
+- Speech-recognition fallback disclosure must make clear that the device, browser, or platform service may process audio online. JotCue receives the resulting transcript and still does not submit it automatically.
+- Microphone and speech permissions are requested only in response to an explicit user voice action. Permission denial must leave typed Ask JotCue fully usable.
+- Do not persist raw microphone audio, voice recordings, speech sessions, or assistant conversation history as part of Voice.
+- Unsupported platforms retain typed Ask JotCue without degraded mutation safety. Linux has no Voice requirement in Patch 32; Windows speech support remains dependent on the plugin/platform implementation.
+- Voice must not broaden Hybrid AI authority, Multi-step Agency authority, Trusted automation eligibility, background execution, Personal Graph write authority, or any existing action allow-list.
+

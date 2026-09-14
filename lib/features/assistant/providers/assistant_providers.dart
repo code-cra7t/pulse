@@ -13,6 +13,7 @@ import '../data/ask_jotcue_action_executor.dart';
 import '../data/ask_jotcue_engine.dart';
 import '../data/ask_jotcue_plan_executor.dart';
 import '../data/hybrid_ask_jotcue_service.dart';
+import '../data/voice_input_service.dart';
 import '../models/ai_assistant_preferences.dart';
 
 const _gatewayUrl = String.fromEnvironment('JOTCUE_AI_GATEWAY_URL');
@@ -47,6 +48,12 @@ final hybridAskJotCueServiceProvider = Provider<HybridAskJotCueService>((ref) {
     localEngine: ref.watch(askJotCueEngineProvider),
     gateway: ref.watch(aiGatewayClientProvider),
   );
+});
+
+final voiceInputServiceProvider = Provider<VoiceInputService>((ref) {
+  final service = SpeechToTextVoiceInputService();
+  ref.onDispose(() => unawaited(service.dispose()));
+  return service;
 });
 
 final askJotCueActionExecutorProvider = Provider<AskJotCueActionExecutor>((

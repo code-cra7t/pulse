@@ -51,6 +51,10 @@
 	<string>698582903261-5jphjcagqpt8g10s917aqkj108bomcaq.apps.googleusercontent.com</string>
 	<key>NSUserNotificationUsageDescription</key>
 	<string>JotCue uses notifications for note reminders.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>JotCue uses the microphone only while you explicitly use voice input.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>JotCue turns speech you explicitly record into an editable Ask JotCue transcript.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>JotCue uses your calendar to understand busy time and, only with your approval, manage calendar copies of JotCue reminders and focus blocks.</string>
 	<key>LSRequiresIPhoneOS</key>

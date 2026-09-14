@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,6 +12,7 @@ import '../../pulse/models/pulse_overview.dart';
 import '../../tasks/data/task_dependency_analyzer.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/models/task_metadata_update.dart';
+import '../data/voice_input_service.dart';
 import '../models/ai_assistant_preferences.dart';
 import '../models/ask_jotcue.dart';
 import '../providers/assistant_providers.dart';
@@ -52,11 +55,18 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
   late final TextEditingController _controller;
   late final ScrollController _scrollController;
   late AskJotCueContext _assistantContext;
+  late final VoiceInputService _voiceInput;
+  StreamSubscription<VoiceInputEvent>? _voiceSubscription;
   final Set<String> _runningActionIds = <String>{};
   final Set<String> _completedActionIds = <String>{};
   final Set<String> _runningPlanIds = <String>{};
   final Set<String> _finishedPlanIds = <String>{};
   bool _isAnswering = false;
+  bool _isVoiceListening = false;
+  bool _showSystemVoiceFallback = false;
+  String? _voiceStatus;
+  String _voiceBaseText = '';
+  VoiceRecognitionMode _voiceMode = VoiceRecognitionMode.onDevice;
   final List<AskJotCueMessage> _messages = [
     const AskJotCueMessage(
       text:
@@ -71,10 +81,14 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
     _controller = TextEditingController();
     _scrollController = ScrollController();
     _assistantContext = widget.assistantContext;
+    _voiceInput = ref.read(voiceInputServiceProvider);
+    _voiceSubscription = _voiceInput.events.listen(_handleVoiceEvent);
   }
 
   @override
   void dispose() {
+    unawaited(_voiceSubscription?.cancel());
+    unawaited(_voiceInput.cancel());
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -197,16 +211,34 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
                     maxLines: 3,
                     textCapitalization: TextCapitalization.sentences,
                     textInputAction: TextInputAction.send,
+                    readOnly: _isVoiceListening,
                     decoration: const InputDecoration(
                       hintText: 'Ask about your plan…',
                     ),
-                    onSubmitted: (_) => _submit(),
+                    onSubmitted: _isVoiceListening ? null : (_) => _submit(),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                IconButton.filledTonal(
+                  key: const ValueKey('ask-jotcue-voice'),
+                  onPressed: _isAnswering || !_voiceInput.isPlatformSupported
+                      ? null
+                      : _toggleVoice,
+                  tooltip: !_voiceInput.isPlatformSupported
+                      ? 'Voice input unavailable on this platform'
+                      : _isVoiceListening
+                      ? 'Stop voice input'
+                      : 'Start voice input',
+                  icon: Icon(
+                    _isVoiceListening
+                        ? Icons.stop_circle_outlined
+                        : Icons.mic_rounded,
                   ),
                 ),
                 const SizedBox(width: AppSpacing.xs),
                 IconButton.filled(
                   key: const ValueKey('ask-jotcue-send'),
-                  onPressed: _isAnswering ? null : _submit,
+                  onPressed: _isAnswering || _isVoiceListening ? null : _submit,
                   tooltip: 'Ask JotCue',
                   icon: _isAnswering
                       ? const SizedBox(
@@ -218,6 +250,27 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
                 ),
               ],
             ),
+            if (_voiceStatus != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                _voiceStatus!,
+                key: const ValueKey('ask-jotcue-voice-status'),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (_showSystemVoiceFallback)
+                Center(
+                  child: TextButton(
+                    key: const ValueKey('ask-jotcue-system-voice'),
+                    onPressed: _isVoiceListening
+                        ? null
+                        : _confirmSystemVoiceFallback,
+                    child: const Text('Use system speech'),
+                  ),
+                ),
+            ],
             const SizedBox(height: 4),
             Text(
               aiPreferences.usesRemoteGateway && gatewayConfigured
@@ -240,6 +293,94 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
     _submitText(_controller.text);
   }
 
+  Future<void> _toggleVoice() async {
+    if (_isVoiceListening) {
+      await _voiceInput.stop();
+      return;
+    }
+    _voiceBaseText = _controller.text.trim();
+    await _startVoice(VoiceRecognitionMode.onDevice);
+  }
+
+  Future<void> _startVoice(VoiceRecognitionMode mode) async {
+    if (_isAnswering || !_voiceInput.isPlatformSupported) return;
+    _voiceMode = mode;
+    setState(() {
+      _showSystemVoiceFallback = false;
+      _voiceStatus = mode == VoiceRecognitionMode.onDevice
+          ? 'Starting on-device speech…'
+          : 'Starting system speech…';
+    });
+    await _voiceInput.start(mode: mode);
+  }
+
+  Future<void> _confirmSystemVoiceFallback() async {
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Use system speech?'),
+        content: const Text(
+          'Your device or browser may use an online speech-recognition service. '
+          'JotCue receives the transcript, keeps it editable, and does not submit it until you press Send.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Use system speech'),
+          ),
+        ],
+      ),
+    );
+    if (approved != true || !mounted) return;
+    _voiceBaseText = _controller.text.trim();
+    await _startVoice(VoiceRecognitionMode.system);
+  }
+
+  void _handleVoiceEvent(VoiceInputEvent event) {
+    if (!mounted) return;
+    switch (event.type) {
+      case VoiceInputEventType.listeningChanged:
+        final listening = event.listening ?? false;
+        setState(() {
+          _isVoiceListening = listening;
+          if (listening) {
+            _voiceStatus = _voiceMode == VoiceRecognitionMode.onDevice
+                ? 'Listening on device… Tap stop when you are done.'
+                : 'Listening with system speech… Tap stop when you are done.';
+          } else if (_controller.text.trim().isNotEmpty &&
+              !_showSystemVoiceFallback) {
+            _voiceStatus = 'Transcript ready to edit before sending.';
+          }
+        });
+      case VoiceInputEventType.transcript:
+        final recognized = event.transcript?.trim() ?? '';
+        final combined = _voiceBaseText.isEmpty
+            ? recognized
+            : recognized.isEmpty
+            ? _voiceBaseText
+            : '$_voiceBaseText $recognized';
+        _controller.value = TextEditingValue(
+          text: combined,
+          selection: TextSelection.collapsed(offset: combined.length),
+        );
+        setState(() {
+          if (!_isVoiceListening || event.isFinal) {
+            _voiceStatus = 'Transcript ready to edit before sending.';
+          }
+        });
+      case VoiceInputEventType.error:
+        setState(() {
+          _isVoiceListening = false;
+          _voiceStatus = event.message ?? 'Voice input could not continue.';
+          _showSystemVoiceFallback = event.canRetryWithSystem;
+        });
+    }
+  }
+
   Future<void> _submitText(String value) async {
     final query = value.trim();
     if (query.isEmpty || _isAnswering) return;
@@ -247,6 +388,8 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
     final aiPreferences = widget.aiPreferences;
     setState(() {
       _isAnswering = true;
+      _voiceStatus = null;
+      _showSystemVoiceFallback = false;
       _messages.add(AskJotCueMessage(text: query, isUser: true));
       _controller.clear();
     });

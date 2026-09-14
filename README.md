@@ -12,7 +12,7 @@ planning signals.
 - Offline-first projects and task planning metadata
 - Plan workspace for projects, deadlines, priorities, effort, and flexibility
 - Pulse workspace for deterministic daily focus and attention cues
-- Ask JotCue: a local-first conversational planning view with optional Hybrid AI fallback and preview-first Task completion, Task planning metadata, capture, and local schedule-move actions
+- Ask JotCue: a local-first conversational planning view with explicit push-to-talk voice transcription, optional Hybrid AI fallback, and preview-first Task completion, Task planning metadata, capture, and local schedule-move actions
 - Read-only Android/iOS calendar availability and deterministic scheduling proposals
 - Derived on-device Personal Graph across Notes, Tasks, Projects, deadlines, and accepted schedule blocks
 - User-defined planning windows, breaks, daily focus limits, and protected lunch
@@ -138,3 +138,7 @@ Pulse now turns contextual reasoning into concise live interventions instead of 
 
 ### Multi-step Agency (Patch 31)
 Ask JotCue can now prepare small reviewed action sequences from explicit requests such as “First mark the draft complete, then set the summary to high priority.” A plan contains 2–5 existing typed JotCue actions, shows every step before anything changes, and requires one explicit plan confirmation before execution. JotCue preflights the current assistant permission policy, then executes steps sequentially through the same local action executor used for single changes. Each step is revalidated when it runs, execution stops on the first failure, and any earlier successful steps are reported honestly as partially applied rather than being presented as rolled back. Failed plans must be requested again against fresh state. Hybrid AI remains limited to one locally rebuilt tool proposal and cannot create remote autonomous action chains.
+
+### Voice (Patch 32)
+Ask JotCue now supports explicit push-to-talk speech input on supported platforms. Voice recognition produces an editable transcript inside the existing Ask JotCue composer; it never submits or executes an action automatically. JotCue requests on-device recognition first where the operating system and installed language support it. If that path is unavailable, JotCue does not silently switch to a potentially online recognizer: the user must separately choose the disclosed system-speech fallback. Recognized text then follows exactly the same local-first parser, preview, permission-policy, explicit Apply, and executor path as typed input. No always-listening behavior, background microphone access, raw-audio persistence, new mutation type, or broader Trusted/Hybrid/Multi-step authority is introduced by Voice.
+

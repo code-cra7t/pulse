@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pulse/core/services/app_theme.dart';
+import 'package:pulse/features/assistant/data/voice_input_service.dart';
 import 'package:pulse/features/assistant/models/ask_jotcue.dart';
 import 'package:pulse/features/assistant/presentation/ask_jotcue_sheet.dart';
+import 'package:pulse/features/assistant/providers/assistant_providers.dart';
 import 'package:pulse/features/automation/models/automation_preferences.dart';
 import 'package:pulse/features/automation/providers/automation_providers.dart';
 import 'package:pulse/features/tasks/models/task.dart';
@@ -214,6 +218,100 @@ void main() {
     },
   );
 
+  testWidgets('voice transcript stays editable and never auto-submits', (
+    tester,
+  ) async {
+    final voice = _FakeVoiceInputService();
+    addTearDown(voice.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          automationPreferencesProvider.overrideWith(
+            (ref) =>
+                const AutomationPreferences(level: AutomationLevel.suggest),
+          ),
+          voiceInputServiceProvider.overrideWithValue(voice),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.build(),
+          home: Scaffold(
+            body: AskJotCueSheet(assistantContext: assistantContext()),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('ask-jotcue-voice')));
+    await tester.pump();
+    expect(voice.starts, [VoiceRecognitionMode.onDevice]);
+
+    voice.emitTranscript('Add task Buy groceries', isFinal: true);
+    voice.finishListening();
+    await tester.pump();
+
+    final field = tester.widget<TextField>(
+      find.byKey(const ValueKey('ask-jotcue-field')),
+    );
+    expect(field.controller?.text, 'Add task Buy groceries');
+    expect(field.readOnly, isFalse);
+    expect(find.text('Create task'), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('ask-jotcue-field')),
+      'Add task Buy groceries by Friday',
+    );
+    await tester.tap(find.byKey(const ValueKey('ask-jotcue-send')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create task'), findsOneWidget);
+  });
+
+  testWidgets('system speech fallback is separately disclosed and approved', (
+    tester,
+  ) async {
+    final voice = _FakeVoiceInputService();
+    addTearDown(voice.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          automationPreferencesProvider.overrideWith(
+            (ref) =>
+                const AutomationPreferences(level: AutomationLevel.suggest),
+          ),
+          voiceInputServiceProvider.overrideWithValue(voice),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.build(),
+          home: Scaffold(
+            body: AskJotCueSheet(assistantContext: assistantContext()),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('ask-jotcue-voice')));
+    await tester.pump();
+    voice.failOnDevice();
+    await tester.pump();
+
+    expect(find.text('Use system speech'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('ask-jotcue-system-voice')));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('may use an online speech-recognition service'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Use system speech'));
+    await tester.pump();
+    expect(voice.starts, [
+      VoiceRecognitionMode.onDevice,
+      VoiceRecognitionMode.system,
+    ]);
+  });
+
   testWidgets('suggest mode shows a bounded multi-step plan preview', (
     tester,
   ) async {
@@ -324,4 +422,63 @@ void main() {
       findsNothing,
     );
   });
+}
+
+class _FakeVoiceInputService implements VoiceInputService {
+  final StreamController<VoiceInputEvent> _events =
+      StreamController<VoiceInputEvent>.broadcast(sync: true);
+
+  final List<VoiceRecognitionMode> starts = <VoiceRecognitionMode>[];
+  bool _listening = false;
+
+  @override
+  Stream<VoiceInputEvent> get events => _events.stream;
+
+  @override
+  bool get isListening => _listening;
+
+  @override
+  bool get isPlatformSupported => true;
+
+  @override
+  Future<bool> start({required VoiceRecognitionMode mode}) async {
+    starts.add(mode);
+    _listening = true;
+    _events.add(VoiceInputEvent.listening(true));
+    return true;
+  }
+
+  void emitTranscript(String text, {required bool isFinal}) {
+    _events.add(VoiceInputEvent.transcript(text, isFinal: isFinal));
+  }
+
+  void finishListening() {
+    _listening = false;
+    _events.add(VoiceInputEvent.listening(false));
+  }
+
+  void failOnDevice() {
+    _listening = false;
+    _events.add(
+      VoiceInputEvent.error(
+        'On-device speech recognition is unavailable for this language or device.',
+        canRetryWithSystem: true,
+      ),
+    );
+  }
+
+  @override
+  Future<void> stop() async {
+    finishListening();
+  }
+
+  @override
+  Future<void> cancel() async {
+    if (_listening) finishListening();
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _events.close();
+  }
 }
