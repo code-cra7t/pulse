@@ -75,6 +75,7 @@ class AskJotCuePlanExecutor {
     }
 
     for (final proposal in plan.steps) {
+      _actionExecutor.validateOwnership(proposal);
       final decision = _actionExecutor.decisionFor(
         preferences: preferences,
         proposal: proposal,

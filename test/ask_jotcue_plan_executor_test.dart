@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pulse/core/models/priority_level.dart';
 import 'package:pulse/features/assistant/data/ask_jotcue_action_executor.dart';
+import 'package:pulse/features/assistant/data/assistant_account_guard.dart';
 import 'package:pulse/features/assistant/data/ask_jotcue_plan_executor.dart';
 import 'package:pulse/features/assistant/models/ask_jotcue.dart';
 import 'package:pulse/features/automation/data/automation_policy.dart';
@@ -52,8 +53,13 @@ void main() {
   AskJotCueActionExecutor actionExecutor({
     required List<String> calls,
     bool failMetadata = false,
+    String? Function()? currentUserId,
+    void Function()? afterCompletion,
   }) {
     return AskJotCueActionExecutor(
+      accountGuard: AssistantAccountGuard(
+        currentUserId: currentUserId ?? () => 'user',
+      ),
       policy: const AutomationPolicy(),
       setTaskCompletion:
           ({
@@ -63,6 +69,7 @@ void main() {
             required isCompleted,
           }) async {
             calls.add('completion:$taskId');
+            afterCompletion?.call();
           },
       updateTaskMetadata:
           ({
@@ -184,6 +191,56 @@ void main() {
       throwsA(isA<StateError>()),
     );
     expect(calls, isEmpty);
+  });
+  test('account switch preflight prevents every plan step', () async {
+    final calls = <String>[];
+    final executor = AskJotCuePlanExecutor(
+      actionExecutor: actionExecutor(
+        calls: calls,
+        currentUserId: () => 'other-user',
+      ),
+    );
+
+    await expectLater(
+      executor.execute(
+        preferences: const AutomationPreferences(
+          level: AutomationLevel.approval,
+        ),
+        plan: plan([completion('one'), priority()]),
+        now: now,
+        approved: true,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    expect(calls, isEmpty);
+  });
+
+  test('account switch between steps stops the remaining plan', () async {
+    final calls = <String>[];
+    var currentUserId = 'user';
+    final executor = AskJotCuePlanExecutor(
+      actionExecutor: actionExecutor(
+        calls: calls,
+        currentUserId: () => currentUserId,
+        afterCompletion: () {
+          currentUserId = 'other-user';
+        },
+      ),
+    );
+
+    final result = await executor.execute(
+      preferences: const AutomationPreferences(level: AutomationLevel.approval),
+      plan: plan([completion('one'), priority(), completion('three')]),
+      now: now,
+      approved: true,
+    );
+
+    expect(calls, ['completion:one']);
+    expect(result.isComplete, isFalse);
+    expect(result.succeededCount, 1);
+    expect(result.steps[1].status, AskJotCuePlanStepStatus.failed);
+    expect(result.steps[1].message, contains('signed-in account changed'));
+    expect(result.steps[2].status, AskJotCuePlanStepStatus.notRun);
   });
 }
 

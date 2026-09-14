@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pulse/core/models/priority_level.dart';
 import 'package:pulse/features/assistant/data/ask_jotcue_action_executor.dart';
+import 'package:pulse/features/assistant/data/assistant_account_guard.dart';
 import 'package:pulse/features/assistant/models/ask_jotcue.dart';
 import 'package:pulse/features/automation/data/automation_policy.dart';
 import 'package:pulse/features/automation/models/automation_preferences.dart';
@@ -12,6 +13,10 @@ import 'package:pulse/features/tasks/models/task_metadata_update.dart';
 
 void main() {
   final now = DateTime(2026, 9, 13, 10);
+
+  AssistantAccountGuard accountGuard({String? currentUserId = 'user'}) {
+    return AssistantAccountGuard(currentUserId: () => currentUserId);
+  }
 
   AskJotCueActionProposal completionProposal({bool completed = true}) {
     return AskJotCueActionProposal(
@@ -74,6 +79,7 @@ void main() {
   test('suggest mode never executes a completion mutation', () async {
     var completionCalls = 0;
     final executor = AskJotCueActionExecutor(
+      accountGuard: accountGuard(),
       policy: const AutomationPolicy(),
       setTaskCompletion:
           ({
@@ -117,6 +123,7 @@ void main() {
     () async {
       bool? target;
       final executor = AskJotCueActionExecutor(
+        accountGuard: accountGuard(),
         policy: const AutomationPolicy(),
         setTaskCompletion:
             ({
@@ -169,6 +176,7 @@ void main() {
 
   test('trusted completion remains approval-gated by policy', () {
     final executor = AskJotCueActionExecutor(
+      accountGuard: accountGuard(),
       policy: const AutomationPolicy(),
       setTaskCompletion:
           ({
@@ -207,6 +215,7 @@ void main() {
     () async {
       TaskMetadataUpdate? captured;
       final executor = AskJotCueActionExecutor(
+        accountGuard: accountGuard(),
         policy: const AutomationPolicy(),
         setTaskCompletion:
             ({
@@ -249,6 +258,7 @@ void main() {
     () async {
       TaskMetadataUpdate? captured;
       final executor = AskJotCueActionExecutor(
+        accountGuard: accountGuard(),
         policy: const AutomationPolicy(),
         setTaskCompletion:
             ({
@@ -314,6 +324,7 @@ void main() {
     () async {
       final repository = _FakeScheduleBlocksRepository([scheduledBlock()]);
       final executor = AskJotCueActionExecutor(
+        accountGuard: accountGuard(),
         policy: const AutomationPolicy(),
         setTaskCompletion:
             ({
@@ -370,6 +381,7 @@ void main() {
       ),
     ]);
     final executor = AskJotCueActionExecutor(
+      accountGuard: accountGuard(),
       policy: const AutomationPolicy(),
       setTaskCompletion:
           ({
@@ -411,6 +423,7 @@ void main() {
     () async {
       final repository = _FakeScheduleBlocksRepository([scheduledBlock()]);
       final executor = AskJotCueActionExecutor(
+        accountGuard: accountGuard(),
         policy: const AutomationPolicy(),
         setTaskCompletion:
             ({
@@ -453,6 +466,7 @@ void main() {
     () async {
       final repository = _FakeScheduleBlocksRepository([scheduledBlock()]);
       final executor = AskJotCueActionExecutor(
+        accountGuard: accountGuard(),
         policy: const AutomationPolicy(),
         setTaskCompletion:
             ({
@@ -508,6 +522,7 @@ void main() {
         captureDraft: draft,
       );
       final executor = AskJotCueActionExecutor(
+        accountGuard: accountGuard(),
         policy: const AutomationPolicy(),
         setTaskCompletion:
             ({
@@ -567,6 +582,7 @@ void main() {
     () async {
       var saved = '';
       final executor = AskJotCueActionExecutor(
+        accountGuard: accountGuard(),
         policy: const AutomationPolicy(),
         setTaskCompletion:
             ({
@@ -613,6 +629,53 @@ void main() {
       expect(result, 'Capture saved as a note.');
     },
   );
+  test('account switch rejects a stale preview before mutation', () async {
+    var completionCalls = 0;
+    final executor = AskJotCueActionExecutor(
+      accountGuard: accountGuard(currentUserId: 'other-user'),
+      policy: const AutomationPolicy(),
+      setTaskCompletion:
+          ({
+            required userId,
+            required noteId,
+            required taskId,
+            required isCompleted,
+          }) async {
+            completionCalls += 1;
+          },
+      updateTaskMetadata:
+          ({
+            required userId,
+            required noteId,
+            required taskId,
+            required update,
+          }) async {},
+      scheduleBlocks: _FakeScheduleBlocksRepository([]),
+      isCalendarLinked: (_) async => false,
+      isScheduleMoveAvailable:
+          ({required blockId, required startsAt, required endsAt}) async =>
+              true,
+    );
+
+    await expectLater(
+      executor.execute(
+        preferences: const AutomationPreferences(
+          level: AutomationLevel.approval,
+        ),
+        proposal: completionProposal(),
+        now: now,
+        approved: true,
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.toString(),
+          'message',
+          contains('signed-in account changed'),
+        ),
+      ),
+    );
+    expect(completionCalls, 0);
+  });
 }
 
 class _FakeScheduleBlocksRepository implements ScheduleBlocksRepository {

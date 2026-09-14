@@ -1,4 +1,5 @@
 import 'ai_context_minimizer.dart';
+import 'assistant_account_guard.dart';
 import 'ai_gateway_client.dart';
 import 'ai_tool_proposal_adapter.dart';
 import 'ask_jotcue_engine.dart';
@@ -8,13 +9,16 @@ import '../models/ask_jotcue.dart';
 
 class HybridAskJotCueService {
   const HybridAskJotCueService({
+    required AssistantAccountGuard accountGuard,
     required AskJotCueEngine localEngine,
     required AiGatewayClient gateway,
     this.contextMinimizer = const AiContextMinimizer(),
     this.toolAdapter = const AiToolProposalAdapter(),
-  }) : _localEngine = localEngine,
+  }) : _accountGuard = accountGuard,
+       _localEngine = localEngine,
        _gateway = gateway;
 
+  final AssistantAccountGuard _accountGuard;
   final AskJotCueEngine _localEngine;
   final AiGatewayClient _gateway;
   final AiContextMinimizer contextMinimizer;
@@ -27,6 +31,17 @@ class HybridAskJotCueService {
     required AskJotCueContext context,
     required AiAssistantPreferences preferences,
   }) async {
+    try {
+      _accountGuard.validateContext(context);
+    } on StateError {
+      return const AskJotCueAnswer(
+        intent: AskJotCueIntent.unknown,
+        title: 'Account changed',
+        text:
+            'Ask JotCue stopped because this planning context no longer belongs to the signed-in account. Refresh and ask again. Nothing was changed.',
+      );
+    }
+
     final localPlan = AskJotCuePlanBuilder(
       engine: _localEngine,
     ).build(query: query, context: context);

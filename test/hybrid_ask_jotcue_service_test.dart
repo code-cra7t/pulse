@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pulse/features/assistant/data/ai_gateway_client.dart';
 import 'package:pulse/features/assistant/data/ask_jotcue_engine.dart';
+import 'package:pulse/features/assistant/data/assistant_account_guard.dart';
 import 'package:pulse/features/assistant/data/hybrid_ask_jotcue_service.dart';
 import 'package:pulse/features/assistant/models/ai_assistant_preferences.dart';
 import 'package:pulse/features/assistant/models/ai_gateway.dart';
@@ -11,6 +12,11 @@ import 'package:pulse/features/tasks/models/task.dart';
 
 void main() {
   final now = DateTime(2026, 9, 13, 10);
+
+  AssistantAccountGuard accountGuard({String? currentUserId = 'user'}) {
+    return AssistantAccountGuard(currentUserId: () => currentUserId);
+  }
+
   const pulse = PulseOverview(
     focusItems: [],
     cues: [],
@@ -43,6 +49,7 @@ void main() {
       response: const AiGatewayResponse(answer: 'Remote answer'),
     );
     final service = HybridAskJotCueService(
+      accountGuard: accountGuard(),
       localEngine: const AskJotCueEngine(),
       gateway: gateway,
     );
@@ -60,6 +67,7 @@ void main() {
       response: const AiGatewayResponse(answer: 'A remote joke'),
     );
     final service = HybridAskJotCueService(
+      accountGuard: accountGuard(),
       localEngine: const AskJotCueEngine(),
       gateway: gateway,
     );
@@ -79,6 +87,7 @@ void main() {
       configured: false,
     );
     final service = HybridAskJotCueService(
+      accountGuard: accountGuard(),
       localEngine: const AskJotCueEngine(),
       gateway: gateway,
     );
@@ -97,6 +106,7 @@ void main() {
       response: const AiGatewayResponse(answer: 'Should not be used'),
     );
     final service = HybridAskJotCueService(
+      accountGuard: accountGuard(),
       localEngine: const AskJotCueEngine(),
       gateway: gateway,
     );
@@ -114,6 +124,7 @@ void main() {
       response: const AiGatewayResponse(answer: 'Here is a bounded answer.'),
     );
     final service = HybridAskJotCueService(
+      accountGuard: accountGuard(),
       localEngine: const AskJotCueEngine(),
       gateway: gateway,
     );
@@ -132,6 +143,7 @@ void main() {
       response: const AiGatewayResponse(answer: 'Should not be used'),
     );
     final service = HybridAskJotCueService(
+      accountGuard: accountGuard(),
       localEngine: const AskJotCueEngine(),
       gateway: gateway,
     );
@@ -158,6 +170,7 @@ void main() {
         ),
       );
       final service = HybridAskJotCueService(
+        accountGuard: accountGuard(),
         localEngine: const AskJotCueEngine(),
         gateway: gateway,
       );
@@ -192,6 +205,7 @@ void main() {
         ),
       );
       final service = HybridAskJotCueService(
+        accountGuard: accountGuard(),
         localEngine: const AskJotCueEngine(),
         gateway: gateway,
       );
@@ -222,6 +236,7 @@ void main() {
       ),
     );
     final service = HybridAskJotCueService(
+      accountGuard: accountGuard(),
       localEngine: const AskJotCueEngine(),
       gateway: gateway,
     );
@@ -241,6 +256,7 @@ void main() {
         response: const AiGatewayResponse(answer: 'Should not be used'),
       );
       final service = HybridAskJotCueService(
+        accountGuard: accountGuard(),
         localEngine: const AskJotCueEngine(),
         gateway: gateway,
       );
@@ -269,6 +285,7 @@ void main() {
       ),
     );
     final service = HybridAskJotCueService(
+      accountGuard: accountGuard(),
       localEngine: const AskJotCueEngine(),
       gateway: gateway,
     );
@@ -279,6 +296,58 @@ void main() {
     );
     expect(answer.actionProposal, isNull);
     expect(answer.text, contains('could not be safely used'));
+  });
+  test('account switch fails closed before local or remote work', () async {
+    final gateway = _FakeGateway(
+      response: const AiGatewayResponse(answer: 'Should not be used'),
+    );
+    final service = HybridAskJotCueService(
+      accountGuard: accountGuard(currentUserId: 'other-user'),
+      localEngine: const AskJotCueEngine(),
+      gateway: gateway,
+    );
+
+    final answer = await service.answer(
+      query: 'Tell me a joke',
+      context: context,
+      preferences: const AiAssistantPreferences(mode: AiAssistantMode.hybrid),
+    );
+
+    expect(gateway.calls, 0);
+    expect(answer.usedRemoteAi, isFalse);
+    expect(answer.actionProposal, isNull);
+    expect(answer.actionPlan, isNull);
+    expect(answer.title, 'Account changed');
+    expect(answer.text, contains('Refresh and ask again'));
+  });
+
+  test('mixed-account context fails closed before Hybrid routing', () async {
+    final gateway = _FakeGateway(
+      response: const AiGatewayResponse(answer: 'Should not be used'),
+    );
+    final service = HybridAskJotCueService(
+      accountGuard: accountGuard(),
+      localEngine: const AskJotCueEngine(),
+      gateway: gateway,
+    );
+    final foreignTask = Task(
+      id: 'foreign-task',
+      userId: 'other-user',
+      title: 'Foreign task',
+      isCompleted: false,
+      sourceNoteId: 'foreign-note',
+      sourceLineIndex: 0,
+    );
+
+    final answer = await service.answer(
+      query: 'Tell me a joke',
+      context: context.copyWith(tasks: [task, foreignTask]),
+      preferences: const AiAssistantPreferences(mode: AiAssistantMode.hybrid),
+    );
+
+    expect(gateway.calls, 0);
+    expect(answer.usedRemoteAi, isFalse);
+    expect(answer.title, 'Account changed');
   });
 }
 

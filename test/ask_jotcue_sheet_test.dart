@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pulse/core/services/app_theme.dart';
+import 'package:pulse/features/assistant/data/assistant_account_guard.dart';
 import 'package:pulse/features/assistant/data/voice_input_service.dart';
 import 'package:pulse/features/assistant/models/ask_jotcue.dart';
 import 'package:pulse/features/assistant/presentation/ask_jotcue_sheet.dart';
@@ -48,6 +49,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          assistantAccountGuardProvider.overrideWithValue(
+            AssistantAccountGuard(currentUserId: () => 'user'),
+          ),
           automationPreferencesProvider.overrideWith(
             (ref) =>
                 const AutomationPreferences(level: AutomationLevel.suggest),
@@ -76,6 +80,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          assistantAccountGuardProvider.overrideWithValue(
+            AssistantAccountGuard(currentUserId: () => 'user'),
+          ),
           automationPreferencesProvider.overrideWith(
             (ref) =>
                 const AutomationPreferences(level: AutomationLevel.suggest),
@@ -107,6 +114,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          assistantAccountGuardProvider.overrideWithValue(
+            AssistantAccountGuard(currentUserId: () => 'user'),
+          ),
           automationPreferencesProvider.overrideWith(
             (ref) =>
                 const AutomationPreferences(level: AutomationLevel.suggest),
@@ -154,6 +164,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          assistantAccountGuardProvider.overrideWithValue(
+            AssistantAccountGuard(currentUserId: () => 'user'),
+          ),
           automationPreferencesProvider.overrideWith(
             (ref) =>
                 const AutomationPreferences(level: AutomationLevel.suggest),
@@ -191,6 +204,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            assistantAccountGuardProvider.overrideWithValue(
+              AssistantAccountGuard(currentUserId: () => 'user'),
+            ),
             automationPreferencesProvider.overrideWith(
               (ref) =>
                   const AutomationPreferences(level: AutomationLevel.suggest),
@@ -227,6 +243,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          assistantAccountGuardProvider.overrideWithValue(
+            AssistantAccountGuard(currentUserId: () => 'user'),
+          ),
           automationPreferencesProvider.overrideWith(
             (ref) =>
                 const AutomationPreferences(level: AutomationLevel.suggest),
@@ -276,6 +295,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          assistantAccountGuardProvider.overrideWithValue(
+            AssistantAccountGuard(currentUserId: () => 'user'),
+          ),
           automationPreferencesProvider.overrideWith(
             (ref) =>
                 const AutomationPreferences(level: AutomationLevel.suggest),
@@ -341,6 +363,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          assistantAccountGuardProvider.overrideWithValue(
+            AssistantAccountGuard(currentUserId: () => 'user'),
+          ),
           automationPreferencesProvider.overrideWith(
             (ref) =>
                 const AutomationPreferences(level: AutomationLevel.suggest),
@@ -390,6 +415,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          assistantAccountGuardProvider.overrideWithValue(
+            AssistantAccountGuard(currentUserId: () => 'user'),
+          ),
           automationPreferencesProvider.overrideWith(
             (ref) =>
                 const AutomationPreferences(level: AutomationLevel.observe),

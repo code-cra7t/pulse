@@ -6,6 +6,7 @@ import '../../scheduling/data/schedule_blocks_repository.dart';
 import '../../scheduling/models/schedule_block.dart';
 import '../../tasks/models/task_metadata_update.dart';
 import '../models/ask_jotcue.dart';
+import 'assistant_account_guard.dart';
 
 typedef SetTaskCompletion =
     Future<void> Function({
@@ -46,6 +47,7 @@ typedef ScheduleMoveAvailabilityCheck =
 
 class AskJotCueActionExecutor {
   const AskJotCueActionExecutor({
+    required AssistantAccountGuard accountGuard,
     required AutomationPolicy policy,
     required SetTaskCompletion setTaskCompletion,
     required UpdateTaskMetadata updateTaskMetadata,
@@ -54,7 +56,8 @@ class AskJotCueActionExecutor {
     required ScheduleMoveAvailabilityCheck isScheduleMoveAvailable,
     CreateStructuredCapture? createStructuredCapture,
     SaveCaptureAsNote? saveCaptureAsNote,
-  }) : _policy = policy,
+  }) : _accountGuard = accountGuard,
+       _policy = policy,
        _setTaskCompletion = setTaskCompletion,
        _updateTaskMetadata = updateTaskMetadata,
        _scheduleBlocks = scheduleBlocks,
@@ -63,6 +66,7 @@ class AskJotCueActionExecutor {
        _createStructuredCapture = createStructuredCapture,
        _saveCaptureAsNote = saveCaptureAsNote;
 
+  final AssistantAccountGuard _accountGuard;
   final AutomationPolicy _policy;
   final SetTaskCompletion _setTaskCompletion;
   final UpdateTaskMetadata _updateTaskMetadata;
@@ -71,6 +75,10 @@ class AskJotCueActionExecutor {
   final ScheduleMoveAvailabilityCheck _isScheduleMoveAvailable;
   final CreateStructuredCapture? _createStructuredCapture;
   final SaveCaptureAsNote? _saveCaptureAsNote;
+
+  void validateOwnership(AskJotCueActionProposal proposal) {
+    _accountGuard.validateProposal(proposal);
+  }
 
   AutomationDecision decisionFor({
     required AutomationPreferences preferences,
@@ -88,6 +96,7 @@ class AskJotCueActionExecutor {
     required DateTime now,
     required bool approved,
   }) async {
+    validateOwnership(proposal);
     final decision = decisionFor(preferences: preferences, proposal: proposal);
     if (decision == AutomationDecision.observeOnly) {
       throw StateError(

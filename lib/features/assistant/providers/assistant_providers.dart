@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/offline/offline_ai_assistant_store.dart';
+import '../../../core/services/firebase_providers.dart';
 import '../../automation/providers/automation_providers.dart';
 import '../../calendar/providers/calendar_providers.dart';
 import '../../capture/providers/capture_providers.dart';
 import '../../scheduling/providers/scheduling_providers.dart';
 import '../../tasks/providers/task_providers.dart';
 import '../data/ai_gateway_client.dart';
+import '../data/assistant_account_guard.dart';
 import '../data/ask_jotcue_action_executor.dart';
 import '../data/ask_jotcue_engine.dart';
 import '../data/ask_jotcue_plan_executor.dart';
@@ -43,8 +45,16 @@ final askJotCueEngineProvider = Provider<AskJotCueEngine>((ref) {
   return const AskJotCueEngine();
 });
 
+final assistantAccountGuardProvider = Provider<AssistantAccountGuard>((ref) {
+  final firebaseAuth = ref.watch(firebaseAuthProvider);
+  return AssistantAccountGuard(
+    currentUserId: () => firebaseAuth.currentUser?.uid,
+  );
+});
+
 final hybridAskJotCueServiceProvider = Provider<HybridAskJotCueService>((ref) {
   return HybridAskJotCueService(
+    accountGuard: ref.watch(assistantAccountGuardProvider),
     localEngine: ref.watch(askJotCueEngineProvider),
     gateway: ref.watch(aiGatewayClientProvider),
   );
@@ -64,6 +74,7 @@ final askJotCueActionExecutorProvider = Provider<AskJotCueActionExecutor>((
   final calendar = ref.watch(deviceScheduleCalendarServiceProvider);
   final capture = ref.watch(captureServiceProvider);
   return AskJotCueActionExecutor(
+    accountGuard: ref.watch(assistantAccountGuardProvider),
     policy: ref.watch(automationPolicyProvider),
     setTaskCompletion:
         ({
