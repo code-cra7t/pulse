@@ -180,3 +180,16 @@ Trusted automation rules:
 - Event dates must come from explicit user-authored structured input. Do not manufacture dates from surrounding prose.
 - Existing Notes, Tasks, Projects, deadlines, dependencies, and schedule blocks remain authoritative. Removing or editing the source fact must naturally change the next derived graph build.
 - Patch 28 does not broaden Hybrid AI, Trusted automation, background execution, or Ask JotCue mutation permissions.
+
+## Patch 29 Contextual Reasoning 2.0 guardrails
+- Contextual reasoning is deterministic and read-only. It must never mutate Tasks, Projects, Notes, schedules, calendars, automation state, or Personal Graph source data.
+- Reuse existing authoritative read models instead of duplicating planning logic. Task readiness/blocking comes from `TaskDependencyAnalyzer`; scheduling capacity comes from existing availability/scheduling state; recovery issues come from replanning; Personal Graph remains derived.
+- Blocked Tasks must never be recommended as the best next action. Missing dependencies and dependency cycles fail closed.
+- Completed Tasks and inactive Projects must not be promoted as current work.
+- Recommendations may consider Task/Project deadlines, priorities, effort estimates, accepted schedule blocks, scheduling proposals, current free capacity, replanning signals, downstream dependency impact, Personal Graph relationships, and current local time.
+- Personal Graph People, Decisions, and Events may enrich explanations only when those relationships already exist in the derived graph. Contextual reasoning must not perform a second entity-extraction pass or infer new graph facts.
+- Prefer deterministic facts over inferred importance. Do not invent deadlines, effort, blockers, availability, people, decisions, events, or schedule windows when data is absent.
+- Execution-window suggestions must come from accepted future schedule blocks, current deterministic scheduling proposals/free slots, or explicit replanning suggestions. Do not fabricate calendar availability.
+- When evidence is incomplete, expose a limitation or lower confidence instead of pretending certainty.
+- Alternatives must also be currently actionable; do not recommend blocked work merely to provide a second option.
+- Patch 29 adds reasoning only. It does not broaden Ask JotCue action types, Trusted automation eligibility, Hybrid AI authority, background execution, or multi-step agency.

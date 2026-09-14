@@ -1,5 +1,6 @@
 import '../../../core/models/priority_level.dart';
 import '../../capture/models/capture_draft.dart';
+import '../../personal_graph/models/personal_graph.dart';
 import '../../projects/models/project.dart';
 import '../../pulse/models/daily_pulse_loop.dart';
 import '../../pulse/models/pulse_overview.dart';
@@ -7,6 +8,7 @@ import '../../scheduling/models/replanning_overview.dart';
 import '../../scheduling/models/schedule_block.dart';
 import '../../scheduling/models/scheduling_day_state.dart';
 import '../../tasks/models/task.dart';
+import '../../tasks/models/task_action_cue.dart';
 import '../../tasks/models/task_metadata_update.dart';
 
 enum AskJotCueIntent {
@@ -43,6 +45,8 @@ class AskJotCueContext {
     required this.blocks,
     this.scheduling,
     this.replanning,
+    this.dependencyAnalysis,
+    this.personalGraph,
   });
 
   final DateTime now;
@@ -54,6 +58,8 @@ class AskJotCueContext {
   final List<ScheduleBlock> blocks;
   final SchedulingDayState? scheduling;
   final ReplanningOverview? replanning;
+  final TaskDependencyAnalysis? dependencyAnalysis;
+  final PersonalGraph? personalGraph;
 
   AskJotCueContext copyWith({
     PulseOverview? pulse,
@@ -63,6 +69,8 @@ class AskJotCueContext {
     List<ScheduleBlock>? blocks,
     Object? scheduling = _unchanged,
     Object? replanning = _unchanged,
+    Object? dependencyAnalysis = _unchanged,
+    Object? personalGraph = _unchanged,
   }) {
     return AskJotCueContext(
       now: now,
@@ -78,6 +86,12 @@ class AskJotCueContext {
       replanning: identical(replanning, _unchanged)
           ? this.replanning
           : replanning as ReplanningOverview?,
+      dependencyAnalysis: identical(dependencyAnalysis, _unchanged)
+          ? this.dependencyAnalysis
+          : dependencyAnalysis as TaskDependencyAnalysis?,
+      personalGraph: identical(personalGraph, _unchanged)
+          ? this.personalGraph
+          : personalGraph as PersonalGraph?,
     );
   }
 }

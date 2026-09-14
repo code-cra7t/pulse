@@ -115,20 +115,33 @@ void main() {
     );
   }
 
-  test(
-    'focus question returns ranked Pulse focus instead of recomputing it',
-    () {
-      final answer = engine.answer(
-        query: 'What should I do now?',
-        context: context(),
-      );
+  test('focus question returns deterministic contextual reasoning', () {
+    final answer = engine.answer(
+      query: 'What should I do now?',
+      context: context(),
+    );
 
-      expect(answer.intent, AskJotCueIntent.focusNow);
-      expect(answer.text, contains('Revise chapter 4'));
-      expect(answer.text, contains('Due today'));
-      expect(answer.text, contains('1h 30m'));
-    },
-  );
+    expect(answer.intent, AskJotCueIntent.focusNow);
+    expect(answer.text, contains('Best next: Revise chapter 4'));
+    expect(answer.text, contains('Due today'));
+    expect(answer.text, contains('1h 30m'));
+    expect(answer.text, contains('Why:'));
+    expect(answer.text, contains('Confidence:'));
+  });
+
+  test('focus reasoning refuses to recommend blocked work', () {
+    final answer = engine.answer(
+      query: 'What should I work on?',
+      context: context(
+        tasks: [task(waitingFor: 'Susan')],
+        blocks: const [],
+      ),
+    );
+
+    expect(answer.intent, AskJotCueIntent.focusNow);
+    expect(answer.title, 'Nothing ready yet');
+    expect(answer.text, contains('blocked by prerequisites or Waiting for'));
+  });
 
   test(
     'due soon includes a project whose date is today even after midnight',

@@ -47,6 +47,7 @@ class PulseScreen extends ConsumerWidget {
     final projects = projectsAsync.asData?.value ?? const <Project>[];
     final tasks = ref.watch(tasksProvider);
     final dependencyAnalysis = ref.watch(taskDependencyAnalysisProvider);
+    final personalGraph = ref.watch(personalGraphProvider);
     final currentTime = now ?? DateTime.now();
     final replanningNow = DateTime(
       currentTime.year,
@@ -126,6 +127,8 @@ class PulseScreen extends ConsumerWidget {
                               const <ScheduleBlock>[],
                           scheduling: scheduleAsync.asData?.value,
                           replanning: replanningAsync.asData?.value,
+                          dependencyAnalysis: dependencyAnalysis,
+                          personalGraph: personalGraph,
                         ),
                       );
                     },

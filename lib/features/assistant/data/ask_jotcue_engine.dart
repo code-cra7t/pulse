@@ -2,6 +2,8 @@ import '../../../core/models/priority_level.dart';
 import '../../capture/data/natural_language_capture_parser.dart';
 import '../../capture/models/capture_draft.dart';
 import '../../projects/models/project.dart';
+import '../../reasoning/data/contextual_reasoning_engine.dart';
+import '../../reasoning/models/contextual_reasoning.dart';
 import '../../scheduling/models/schedule_block.dart';
 import '../../tasks/models/task.dart';
 import '../../tasks/models/task_metadata_update.dart';
@@ -12,7 +14,11 @@ import '../models/ask_jotcue.dart';
 /// This engine never mutates data. It may prepare a narrowly typed action
 /// preview; execution is handled separately behind automation permissions.
 class AskJotCueEngine {
-  const AskJotCueEngine();
+  const AskJotCueEngine({
+    this.reasoningEngine = const ContextualReasoningEngine(),
+  });
+
+  final ContextualReasoningEngine reasoningEngine;
 
   AskJotCueAnswer answer({
     required String query,
@@ -1000,29 +1006,110 @@ class AskJotCueEngine {
   }
 
   AskJotCueAnswer _focus(AskJotCueContext context) {
-    final items = context.pulse.focusItems;
-    if (items.isEmpty) {
+    final reasoning = reasoningEngine.reason(
+      now: context.now,
+      tasks: context.tasks,
+      projects: context.projects,
+      blocks: context.blocks,
+      scheduling: context.scheduling,
+      replanning: context.replanning,
+      dependencyAnalysis: context.dependencyAnalysis,
+      personalGraph: context.personalGraph,
+      pulse: context.pulse,
+      dailyLoop: context.dailyLoop,
+    );
+    final primary = reasoning.primary;
+    if (primary == null) {
+      if (reasoning.blockedTaskCount > 0) {
+        return AskJotCueAnswer(
+          intent: AskJotCueIntent.focusNow,
+          title: 'Nothing ready yet',
+          text:
+              '${reasoning.blockedTaskCount} open ${reasoning.blockedTaskCount == 1 ? 'Task is' : 'Tasks are'} currently blocked by prerequisites or Waiting for. Review those blockers in Plan before JotCue guesses at work that is not actually actionable.',
+        );
+      }
       return const AskJotCueAnswer(
         intent: AskJotCueIntent.focusNow,
         title: 'Focus',
         text:
-            'Nothing is strongly competing for attention right now. Add a deadline, priority, or project in Plan if you want JotCue to rank open work more precisely.',
+            'Nothing is strongly competing for attention right now. Add a deadline, priority, effort estimate, or Project if you want JotCue to rank open work more precisely.',
       );
     }
 
-    final lines = <String>[];
-    for (var i = 0; i < items.length; i += 1) {
-      final item = items[i];
-      final effort = item.task.estimatedMinutes == null
-          ? ''
-          : ' · ${_formatMinutes(item.task.estimatedMinutes!)}';
-      lines.add('${i + 1}. ${item.task.title} — ${item.reason}$effort');
+    final effort = primary.task.estimatedMinutes == null
+        ? ''
+        : ' · ${_formatMinutes(primary.task.estimatedMinutes!)}';
+    final lines = <String>[
+      'Best next: ${primary.task.title} — ${primary.primaryReason}$effort',
+      'Why: ${primary.reasons.take(5).join('; ')}.',
+    ];
+    final project = primary.project;
+    if (project != null) {
+      lines.add('Project: ${project.name}.');
     }
+    if (primary.downstreamOpenTaskCount > 0) {
+      lines.add(
+        'Impact: finishing this unlocks ${primary.downstreamOpenTaskCount} downstream ${primary.downstreamOpenTaskCount == 1 ? 'Task' : 'Tasks'}.',
+      );
+    }
+    final window = primary.executionWindow;
+    if (window != null) {
+      lines.add('When: ${_reasoningWindowText(window, context.now)}');
+    }
+    final contextParts = <String>[];
+    if (primary.people.isNotEmpty) {
+      contextParts.add('involves ${primary.people.take(3).join(', ')}');
+    }
+    if (primary.relatedEvents.isNotEmpty) {
+      contextParts.add('related event: ${primary.relatedEvents.first}');
+    }
+    if (primary.relatedDecisionCount > 0) {
+      contextParts.add(
+        '${primary.relatedDecisionCount} recorded Project ${primary.relatedDecisionCount == 1 ? 'decision' : 'decisions'}',
+      );
+    }
+    if (contextParts.isNotEmpty) {
+      lines.add('Context: ${contextParts.join(' · ')}.');
+    }
+    if (reasoning.blockedTaskCount > 0) {
+      lines.add(
+        'Blocked: ${reasoning.blockedTaskCount} other open ${reasoning.blockedTaskCount == 1 ? 'Task is' : 'Tasks are'} not actionable yet.',
+      );
+    }
+    final alternative = reasoning.alternative;
+    if (alternative != null) {
+      lines.add(
+        'Alternative: ${alternative.task.title} — ${alternative.primaryReason}.',
+      );
+    }
+    lines.add('Confidence: ${reasoning.confidence.name}.');
+    if (reasoning.limitations.isNotEmpty) {
+      lines.add('Limits: ${reasoning.limitations.join(' ')}');
+    }
+
     return AskJotCueAnswer(
       intent: AskJotCueIntent.focusNow,
       title: 'What matters now',
       text: lines.join('\n'),
     );
+  }
+
+  String _reasoningWindowText(ContextualExecutionWindow window, DateTime now) {
+    final range = _sameCalendarDate(window.startsAt, now)
+        ? '${_time(window.startsAt)}–${_time(window.endsAt)}'
+        : '${_dateTime(window.startsAt)}–${_time(window.endsAt)}';
+    return switch (window.kind) {
+      ContextualExecutionWindowKind.activeScheduleBlock =>
+        'Now until ${_time(window.endsAt)}.',
+      ContextualExecutionWindowKind.acceptedScheduleBlock =>
+        'Already planned for $range.',
+      ContextualExecutionWindowKind.scheduleProposal =>
+        'Current schedule proposal suggests $range.',
+      ContextualExecutionWindowKind.replanningSuggestion =>
+        'Replanning suggests $range.',
+      ContextualExecutionWindowKind.freeAvailability =>
+        'Earliest fitting free window is $range.',
+    };
   }
 
   AskJotCueAnswer _dueSoon(AskJotCueContext context) {
