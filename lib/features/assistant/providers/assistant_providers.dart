@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/offline/offline_ai_assistant_store.dart';
 import '../../automation/providers/automation_providers.dart';
 import '../../calendar/providers/calendar_providers.dart';
+import '../../capture/providers/capture_providers.dart';
 import '../../scheduling/providers/scheduling_providers.dart';
 import '../../tasks/providers/task_providers.dart';
 import '../data/ai_gateway_client.dart';
@@ -53,6 +54,7 @@ final askJotCueActionExecutorProvider = Provider<AskJotCueActionExecutor>((
   final taskService = ref.watch(taskServiceProvider);
   final scheduleBlocks = ref.watch(scheduleBlocksRepositoryProvider);
   final calendar = ref.watch(deviceScheduleCalendarServiceProvider);
+  final capture = ref.watch(captureServiceProvider);
   return AskJotCueActionExecutor(
     policy: ref.watch(automationPolicyProvider),
     setTaskCompletion:
@@ -80,6 +82,12 @@ final askJotCueActionExecutorProvider = Provider<AskJotCueActionExecutor>((
         },
     scheduleBlocks: scheduleBlocks,
     isCalendarLinked: calendar.isLinked,
+    createStructuredCapture: ({required userId, required draft}) {
+      return capture.createStructured(userId: userId, draft: draft);
+    },
+    saveCaptureAsNote: ({required userId, required rawText}) {
+      return capture.saveAsNote(userId: userId, rawText: rawText);
+    },
     isScheduleMoveAvailable:
         ({required blockId, required startsAt, required endsAt}) async {
           final date = DateTime(startsAt.year, startsAt.month, startsAt.day);

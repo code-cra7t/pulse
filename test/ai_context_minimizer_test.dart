@@ -51,6 +51,7 @@ void main() {
     );
     final context = AskJotCueContext(
       now: now,
+      userId: 'secret-user-id',
       pulse: pulse,
       dailyLoop: DailyPulseLoop.build(now: now, pulse: pulse, blocks: [block]),
       tasks: [task],

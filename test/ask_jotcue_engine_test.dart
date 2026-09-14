@@ -100,6 +100,7 @@ void main() {
     );
     return AskJotCueContext(
       now: now,
+      userId: 'user',
       pulse: pulse,
       dailyLoop: loop,
       tasks: resolvedTasks,
@@ -238,6 +239,58 @@ void main() {
     expect(answer.intent, AskJotCueIntent.projects);
     expect(answer.text, contains('Life insurance exam'));
     expect(answer.text, contains('1 open task'));
+  });
+
+  test('explicit task capture produces a reviewed creation proposal', () {
+    final answer = engine.answer(
+      query: 'Add task Buy groceries by Friday',
+      context: context(),
+    );
+
+    expect(answer.intent, AskJotCueIntent.action);
+    expect(answer.actionProposal?.kind, AskJotCueActionKind.structuredCapture);
+    expect(answer.actionProposal?.captureDraft?.tasks, ['Buy groceries']);
+    expect(
+      answer.actionProposal?.captureDraft?.deadline,
+      DateTime(2026, 9, 18, 23, 59),
+    );
+    expect(answer.text, contains('Nothing has changed yet'));
+  });
+
+  test(
+    'explicit project capture keeps project, tasks, and deadline together',
+    () {
+      final answer = engine.answer(
+        query:
+            'Create project called Her Rights website with tasks design landing page and create resource directory, due October 5',
+        context: context(),
+      );
+
+      final draft = answer.actionProposal?.captureDraft;
+      expect(
+        answer.actionProposal?.kind,
+        AskJotCueActionKind.structuredCapture,
+      );
+      expect(draft?.projectName, 'Her Rights website');
+      expect(draft?.tasks, [
+        'Design landing page',
+        'Create resource directory',
+      ]);
+      expect(draft?.deadline, DateTime(2026, 10, 5, 23, 59));
+    },
+  );
+
+  test('remember that produces note preview instead of a task', () {
+    final answer = engine.answer(
+      query: 'Remember that Sarah moved the meeting to Friday',
+      context: context(),
+    );
+
+    expect(answer.actionProposal?.kind, AskJotCueActionKind.noteCreate);
+    expect(
+      answer.actionProposal?.noteText,
+      'Sarah moved the meeting to Friday',
+    );
   });
 
   test('unsupported requests are explicitly bounded', () {

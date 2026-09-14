@@ -25,6 +25,7 @@ void main() {
     final now = DateTime(2026, 9, 13, 10);
     return AskJotCueContext(
       now: now,
+      userId: 'user',
       pulse: pulse,
       dailyLoop: DailyPulseLoop.build(now: now, pulse: pulse, blocks: const []),
       tasks: tasks,
@@ -179,6 +180,39 @@ void main() {
     );
     expect(apply.onPressed, isNull);
   });
+
+  testWidgets(
+    'capture request shows reviewed creation preview in suggest mode',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            automationPreferencesProvider.overrideWith(
+              (ref) =>
+                  const AutomationPreferences(level: AutomationLevel.suggest),
+            ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.build(),
+            home: Scaffold(
+              body: AskJotCueSheet(assistantContext: assistantContext()),
+            ),
+          ),
+        ),
+      );
+
+      await tester.enterText(
+        find.byKey(const ValueKey('ask-jotcue-field')),
+        'Add task Buy groceries by Friday',
+      );
+      await tester.tap(find.byKey(const ValueKey('ask-jotcue-send')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create task'), findsOneWidget);
+      expect(find.textContaining('Buy groceries'), findsWidgets);
+      expect(find.text('Suggestion only'), findsWidgets);
+    },
+  );
 
   testWidgets('observe mode explains boundary without exposing action card', (
     tester,

@@ -30,6 +30,7 @@ void main() {
   );
   late final context = AskJotCueContext(
     now: now,
+    userId: 'user',
     pulse: pulse,
     dailyLoop: DailyPulseLoop.build(now: now, pulse: pulse, blocks: const []),
     tasks: [task],
@@ -125,6 +126,55 @@ void main() {
     expect(answer.usedRemoteAi, isTrue);
     expect(answer.text, 'Here is a bounded answer.');
   });
+
+  test('explicit local capture wins before the gateway', () async {
+    final gateway = _FakeGateway(
+      response: const AiGatewayResponse(answer: 'Should not be used'),
+    );
+    final service = HybridAskJotCueService(
+      localEngine: const AskJotCueEngine(),
+      gateway: gateway,
+    );
+    final answer = await service.answer(
+      query: 'Add task Buy groceries by Friday',
+      context: context,
+      preferences: const AiAssistantPreferences(mode: AiAssistantMode.hybrid),
+    );
+
+    expect(gateway.calls, 0);
+    expect(answer.actionProposal?.kind, AskJotCueActionKind.structuredCapture);
+    expect(answer.usedRemoteAi, isFalse);
+  });
+
+  test(
+    'hybrid capture tool still becomes an approval-gated local proposal',
+    () async {
+      final gateway = _FakeGateway(
+        response: const AiGatewayResponse(
+          toolCall: AiGatewayToolCall(
+            name: 'capture.create',
+            arguments: {'text': 'Submit HPC report by Sep 30'},
+          ),
+        ),
+      );
+      final service = HybridAskJotCueService(
+        localEngine: const AskJotCueEngine(),
+        gateway: gateway,
+      );
+      final answer = await service.answer(
+        query: 'Please make sure I remember the HPC report',
+        context: context,
+        preferences: const AiAssistantPreferences(mode: AiAssistantMode.hybrid),
+      );
+
+      expect(gateway.calls, 1);
+      expect(answer.usedRemoteAi, isTrue);
+      expect(
+        answer.actionProposal?.kind,
+        AskJotCueActionKind.structuredCapture,
+      );
+    },
+  );
 
   test('hybrid tool response becomes ordinary local action proposal', () async {
     final gateway = _FakeGateway(

@@ -594,5 +594,7 @@ AutomationActionKind _policyActionFor(AskJotCueActionKind kind) {
       AutomationActionKind.workReviewDecision,
     AskJotCueActionKind.taskPriority => AutomationActionKind.taskPlanningUpdate,
     AskJotCueActionKind.scheduleMove => AutomationActionKind.localScheduleMove,
+    AskJotCueActionKind.structuredCapture || AskJotCueActionKind.noteCreate =>
+      AutomationActionKind.structuredCaptureCreate,
   };
 }

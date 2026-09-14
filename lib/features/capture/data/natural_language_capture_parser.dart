@@ -5,6 +5,8 @@ import '../models/capture_draft.dart';
 /// This parser intentionally understands only clear project/task phrasing.
 /// Nothing is created until the user reviews and confirms the resulting draft.
 class NaturalLanguageCaptureParser {
+  const NaturalLanguageCaptureParser();
+
   static final RegExp _leadingIntent = RegExp(
     r"^(?:i\s+(?:need|have|want|must|should)\s+to\s+|i\s+have\s+|i've\s+got\s+|need\s+to\s+|must\s+|should\s+|please\s+)",
     caseSensitive: false,
@@ -74,6 +76,132 @@ class NaturalLanguageCaptureParser {
     'saturday': DateTime.saturday,
     'sunday': DateTime.sunday,
   };
+
+  /// Parses explicit assistant capture commands without broadening ordinary
+  /// prose into mutations. The returned draft still goes through the same
+  /// review + CaptureService path as Quick Capture.
+  CaptureDraft? parseCommand(String input, {DateTime? now}) {
+    final raw = input.trim();
+    if (raw.isEmpty) return null;
+    final reference = now ?? DateTime.now();
+
+    final projectMatch = RegExp(
+      r'^(?:create|add)\s+(?:a\s+)?project(?:\s+(?:called|named))?\s*[:\-]?\s+(.+)$',
+      caseSensitive: false,
+    ).firstMatch(raw);
+    if (projectMatch != null) {
+      final payload = (projectMatch.group(1) ?? '').trim();
+      return _projectCommandDraft(raw, payload, reference);
+    }
+
+    final taskPatterns = <RegExp>[
+      RegExp(
+        r'^(?:create|add)\s+(?:a\s+)?task(?:\s+(?:called|named))?\s*[:\-]?\s+(.+)$',
+        caseSensitive: false,
+      ),
+      RegExp(r'^add\s+(.+?)\s+to\s+(?:my\s+)?tasks?$', caseSensitive: false),
+      RegExp(r'^remember\s+to\s+(.+)$', caseSensitive: false),
+    ];
+    for (final pattern in taskPatterns) {
+      final match = pattern.firstMatch(raw);
+      if (match == null) continue;
+      final payload = (match.group(1) ?? '').trim();
+      return _taskCommandDraft(raw, payload, reference);
+    }
+    return null;
+  }
+
+  CaptureDraft? _taskCommandDraft(
+    String raw,
+    String payload,
+    DateTime reference,
+  ) {
+    if (payload.isEmpty) return null;
+    final deadlineMatch = _parseDeadline(payload, reference);
+    var title = _stripDeadline(payload, deadlineMatch?.matchedText);
+    title = title
+        .replaceAll(
+          RegExp(r'\b(?:by|due|deadline|on)\b[:\s-]*$', caseSensitive: false),
+          '',
+        )
+        .trim();
+    if (title.isEmpty || title.length > 180) return null;
+    return CaptureDraft(
+      kind: CaptureDraftKind.task,
+      rawText: raw,
+      deadline: deadlineMatch?.date,
+      tasks: [_sentenceCase(title)],
+    );
+  }
+
+  CaptureDraft? _projectCommandDraft(
+    String raw,
+    String payload,
+    DateTime reference,
+  ) {
+    if (payload.isEmpty) return null;
+    final deadlineMatch = _parseDeadline(payload, reference);
+    var body = payload;
+    final deadlinePhrase = deadlineMatch?.matchedText;
+    if (deadlinePhrase != null && deadlinePhrase.isNotEmpty) {
+      body = body.replaceFirst(
+        RegExp(RegExp.escape(deadlinePhrase), caseSensitive: false),
+        '',
+      );
+    }
+    body = body
+        .replaceAll(
+          RegExp(
+            r'[,;]?\s*\bwith\s+(?:a\s+)?(?:deadline|due\s+date)\b[:\s-]*$',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .replaceAll(
+          RegExp(
+            r'[,;]?\s*\b(?:by|due|deadline|on)\b[:\s-]*$',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    String projectName = body;
+    String? taskText;
+    final withTasks = RegExp(
+      r'^(.*?)\s+with\s+tasks?\s*[:\-]?\s+(.+)$',
+      caseSensitive: false,
+    ).firstMatch(body);
+    if (withTasks != null) {
+      projectName = (withTasks.group(1) ?? '').trim();
+      taskText = (withTasks.group(2) ?? '').trim();
+    }
+
+    if (projectName.isEmpty || projectName.length > 100) return null;
+    final tasks = <String>[];
+    if (taskText != null && taskText.isNotEmpty) {
+      for (final segment in _segments(taskText)) {
+        for (final clause in segment.split(_actionSplit)) {
+          var task = clause.trim();
+          task = task.replaceFirst(_leadingIntent, '').trim();
+          if (task.isEmpty) continue;
+          if (_actionStart.hasMatch(task)) {
+            task = _sentenceCase(task);
+            if (!tasks.contains(task)) tasks.add(task);
+          }
+        }
+      }
+    }
+
+    return CaptureDraft(
+      kind: CaptureDraftKind.project,
+      rawText: raw,
+      projectName: _sentenceCase(projectName),
+      deadline: deadlineMatch?.date,
+      tasks: tasks,
+    );
+  }
 
   CaptureDraft? parse(String input, {DateTime? now}) {
     final raw = input.trim();

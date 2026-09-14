@@ -14,7 +14,7 @@ Current product surfaces:
 - Reminders (manual + smart)
 - Plan (projects + task planning metadata)
 - Pulse (deterministic daily focus and attention cues)
-- Ask JotCue (deterministic on-device planning assistant with narrowly typed, preview-first actions)
+- Ask JotCue (deterministic on-device planning assistant with narrowly typed, preview-first actions, including review-first Task/Project/Note capture)
 - Personal Graph (derived local relationships across notes, tasks, projects, deadlines, and accepted schedule blocks)
 - External text sharing into the review-first Quick Capture flow (Android and iOS)
 - Suggested scheduling (explicit availability + local calendar busy time + user-approved accepted JotCue blocks with an offline local cache)
@@ -29,7 +29,7 @@ Rules:
 - Visible note content remains the source of truth for note-backed task text and completion.
 - Planning metadata must not rewrite visible note text.
 - Prefer deterministic planning logic before introducing AI-generated decisions.
-- Ask JotCue is local-first and ephemeral. Deterministic parsing/answers always run before optional Hybrid AI. Hybrid is device-local opt-in, may contact only the build-configured JotCue AI gateway, and must never persist chat history. Remote output may propose only the existing allow-listed Task completion, Task priority, or accepted-block move actions; typing a request never executes it.
+- Ask JotCue is local-first and ephemeral. Deterministic parsing/answers always run before optional Hybrid AI. Hybrid is device-local opt-in, may contact only the build-configured JotCue AI gateway, and must never persist chat history. Remote output may propose only the current allow-listed typed actions; Patch 26 adds review-first structured capture and Note capture alongside Task completion, Task priority, and accepted-block moves. Typing a request never executes it.
 - Do not introduce a fixed bot-face avatar for Ask JotCue; use JotCue brand language until a later personalized assistant-identity system is explicitly designed.
 - Preserve offline-first behavior.
 - Do not deploy Firebase rules unless explicitly instructed.
@@ -103,7 +103,7 @@ Trusted automation rules:
 
 
 ## Patch 21 Ask JotCue action guardrails
-- Parsing and execution are separate. The deterministic parser may prepare only Task completion/incompletion, Task priority, and moving one accepted JotCue block to a specific future time.
+- Parsing and execution are separate. Patch 21 introduced only Task completion/incompletion, Task priority, and moving one accepted JotCue block to a specific future time; later reviewed patches may extend the typed action surface without weakening preview/approval requirements.
 - Every conversational mutation must be previewed before execution. Ask JotCue never mutates merely because the user pressed Send.
 - Observe mode must not expose an executable proposal. Suggest mode may show a non-executable preview. Approval and Trusted may expose Apply, but Ask JotCue still requires that explicit tap.
 - Completion/incompletion uses the source Note checkbox/task line as the source of truth. Task priority uses hidden Task identity metadata. Schedule moves revalidate the exact block snapshot before mutation.
@@ -117,7 +117,7 @@ Trusted automation rules:
 - Never embed provider API secrets in the Flutter client. The optional gateway URL is build-configured with `JOTCUE_AI_GATEWAY_URL`; production URLs must use HTTPS.
 - Local deterministic reasoning always gets first refusal. Only queries classified as unsupported/unknown may be sent remotely.
 - Remote context must be minimized and structured. Do not send Note bodies, source Note IDs/line indexes, account identity, reminder text, external calendar contents, audit history, notification history, or a raw Personal Graph payload.
-- Remote tool output is untrusted input. Accept only allow-listed tool names/argument shapes, resolve IDs against current local state, rebuild a local `AskJotCueActionProposal`, then pass through the existing automation policy and executor revalidation.
+- Remote tool output is untrusted input. Accept only allow-listed tool names/argument shapes, resolve IDs against current local state, rebuild a local `AskJotCueActionProposal`, then pass through the existing automation policy and executor revalidation. Capture tools must be reparsed/validated locally and remain approval-gated.
 - Hybrid mode never bypasses explicit Apply in Ask JotCue, even at Trusted permission level.
 - Unknown/malformed tools, oversized responses, unavailable gateways, stale IDs, and invalid endpoints fail closed to a local answer with no mutation.
 - Remote answers/tool suggestions are ephemeral; do not persist chats, prompts, gateway responses, or model traces in this patch.
@@ -151,3 +151,12 @@ Trusted automation rules:
 - A queued legacy Note mutation must be reconciled against the latest modern remote identities before it is upgraded to the current schema/token; never stamp a lossy legacy payload as modern without preservation.
 - Firestore rule deployment is a separately authorized release action. Verification may run emulator suites only.
 - Release readiness requires old-version/new-version compatibility testing plus Android and iOS physical-device smoke checks; simulator/unit tests alone are insufficient for native calendar/share/notification provisioning behavior.
+
+## Patch 26 assistant-capture guardrails
+- Reuse `NaturalLanguageCaptureParser` plus `CaptureService`; Ask JotCue must not create a second Task/Project/Note persistence path.
+- Local deterministic capture parsing recognizes only explicit assistant capture commands. Ordinary prose must not silently become a creation proposal.
+- Every Task, Project, task-list, or Note capture from Ask JotCue is preview-first. Observe exposes no action, Suggest is non-executable, and Approval/Trusted still require the explicit Apply tap.
+- `AutomationActionKind.structuredCaptureCreate` remains always-approval-required; Patch 26 does not make any capture action trusted-eligible or background-capable.
+- Hybrid capture output is untrusted. `capture.create` supplies text that the local parser must accept before a proposal exists; `note.save` may only preview non-empty bounded text. Neither tool executes remotely.
+- The signed-in user ID is supplied locally to the assistant context only for execution ownership and must not be added to minimized remote AI context.
+- Successful capture execution goes through the existing offline-first capture service. Do not mutate visible Notes, project/task stores, or Firestore directly from the assistant executor.

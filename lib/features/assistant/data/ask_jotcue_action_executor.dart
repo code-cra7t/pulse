@@ -1,6 +1,7 @@
 import '../../../core/models/priority_level.dart';
 import '../../automation/data/automation_policy.dart';
 import '../../automation/models/automation_preferences.dart';
+import '../../capture/models/capture_draft.dart';
 import '../../scheduling/data/schedule_blocks_repository.dart';
 import '../../scheduling/models/schedule_block.dart';
 import '../../tasks/models/task_metadata_update.dart';
@@ -22,6 +23,18 @@ typedef UpdateTaskMetadata =
       required TaskMetadataUpdate update,
     });
 
+typedef CreateStructuredCapture =
+    Future<CaptureResult> Function({
+      required String userId,
+      required CaptureDraft draft,
+    });
+
+typedef SaveCaptureAsNote =
+    Future<CaptureResult> Function({
+      required String userId,
+      required String rawText,
+    });
+
 typedef CalendarLinkCheck = Future<bool> Function(String blockId);
 
 typedef ScheduleMoveAvailabilityCheck =
@@ -39,12 +52,16 @@ class AskJotCueActionExecutor {
     required ScheduleBlocksRepository scheduleBlocks,
     required CalendarLinkCheck isCalendarLinked,
     required ScheduleMoveAvailabilityCheck isScheduleMoveAvailable,
+    CreateStructuredCapture? createStructuredCapture,
+    SaveCaptureAsNote? saveCaptureAsNote,
   }) : _policy = policy,
        _setTaskCompletion = setTaskCompletion,
        _updateTaskMetadata = updateTaskMetadata,
        _scheduleBlocks = scheduleBlocks,
        _isCalendarLinked = isCalendarLinked,
-       _isScheduleMoveAvailable = isScheduleMoveAvailable;
+       _isScheduleMoveAvailable = isScheduleMoveAvailable,
+       _createStructuredCapture = createStructuredCapture,
+       _saveCaptureAsNote = saveCaptureAsNote;
 
   final AutomationPolicy _policy;
   final SetTaskCompletion _setTaskCompletion;
@@ -52,6 +69,8 @@ class AskJotCueActionExecutor {
   final ScheduleBlocksRepository _scheduleBlocks;
   final CalendarLinkCheck _isCalendarLinked;
   final ScheduleMoveAvailabilityCheck _isScheduleMoveAvailable;
+  final CreateStructuredCapture? _createStructuredCapture;
+  final SaveCaptureAsNote? _saveCaptureAsNote;
 
   AutomationDecision decisionFor({
     required AutomationPreferences preferences,
@@ -91,6 +110,10 @@ class AskJotCueActionExecutor {
         return _setPriority(proposal);
       case AskJotCueActionKind.scheduleMove:
         return _moveSchedule(proposal, now);
+      case AskJotCueActionKind.structuredCapture:
+        return _createCapture(proposal);
+      case AskJotCueActionKind.noteCreate:
+        return _createNote(proposal);
     }
   }
 
@@ -124,6 +147,37 @@ class AskJotCueActionExecutor {
       update: TaskMetadataUpdate(priority: priority),
     );
     return 'Set "${proposal.taskTitle}" to ${_priorityLabel(priority)} priority.';
+  }
+
+  Future<String> _createCapture(AskJotCueActionProposal proposal) async {
+    final draft = proposal.captureDraft;
+    final create = _createStructuredCapture;
+    if (draft == null) {
+      throw StateError('The structured capture preview is incomplete.');
+    }
+    if (create == null) {
+      throw StateError('Structured capture is not available right now.');
+    }
+    final result = await create(userId: proposal.userId, draft: draft);
+    if (result.projectId != null) {
+      return result.taskCount == 0
+          ? 'Project created.'
+          : 'Project created with ${result.taskCount} ${result.taskCount == 1 ? 'task' : 'tasks'}.';
+    }
+    return '${result.taskCount} ${result.taskCount == 1 ? 'task' : 'tasks'} captured.';
+  }
+
+  Future<String> _createNote(AskJotCueActionProposal proposal) async {
+    final text = proposal.noteText?.trim();
+    final save = _saveCaptureAsNote;
+    if (text == null || text.isEmpty) {
+      throw StateError('The note capture preview is incomplete.');
+    }
+    if (save == null) {
+      throw StateError('Note capture is not available right now.');
+    }
+    await save(userId: proposal.userId, rawText: text);
+    return 'Capture saved as a note.';
   }
 
   Future<String> _moveSchedule(
@@ -211,6 +265,8 @@ AutomationActionKind _policyAction(AskJotCueActionKind kind) {
       AutomationActionKind.workReviewDecision,
     AskJotCueActionKind.taskPriority => AutomationActionKind.taskPlanningUpdate,
     AskJotCueActionKind.scheduleMove => AutomationActionKind.localScheduleMove,
+    AskJotCueActionKind.structuredCapture || AskJotCueActionKind.noteCreate =>
+      AutomationActionKind.structuredCaptureCreate,
   };
 }
 

@@ -1,4 +1,6 @@
 import '../../../core/models/priority_level.dart';
+import '../../capture/data/natural_language_capture_parser.dart';
+import '../../capture/models/capture_draft.dart';
 import '../../scheduling/models/schedule_block.dart';
 import '../../tasks/models/task.dart';
 import '../models/ask_jotcue.dart';
@@ -140,6 +142,9 @@ class AskJotCueEngine {
 
     final move = _scheduleMoveAction(trimmed, context);
     if (move != null) return move;
+
+    final capture = _captureAction(trimmed, context);
+    if (capture != null) return capture;
 
     return null;
   }
@@ -399,6 +404,100 @@ class AskJotCueEngine {
           'I found one accepted JotCue block to move. Nothing has changed yet.',
       actionProposal: proposal,
     );
+  }
+
+  AskJotCueAnswer? _captureAction(String query, AskJotCueContext context) {
+    final noteText = _explicitNoteText(query);
+    final draft = const NaturalLanguageCaptureParser().parseCommand(
+      query,
+      now: context.now,
+    );
+    if (noteText == null && draft == null) return null;
+
+    final userId = context.userId?.trim();
+    if (userId == null || userId.isEmpty) {
+      return const AskJotCueAnswer(
+        intent: AskJotCueIntent.action,
+        title: 'Sign in required',
+        text: 'Sign in before Ask JotCue can prepare a capture.',
+      );
+    }
+
+    if (noteText != null) {
+      final proposal = AskJotCueActionProposal(
+        id: 'note:${noteText.hashCode}',
+        kind: AskJotCueActionKind.noteCreate,
+        userId: userId,
+        previewTitle: 'Save note',
+        previewText: 'Save this as a captured note:\n“$noteText”',
+        noteText: noteText,
+      );
+      return AskJotCueAnswer(
+        intent: AskJotCueIntent.action,
+        title: 'Action preview',
+        text: 'I understand this as a note capture. Nothing has changed yet.',
+        actionProposal: proposal,
+      );
+    }
+
+    final proposal = AskJotCueActionProposal(
+      id: 'capture:${draft!.kind.name}:${draft.rawText.hashCode}',
+      kind: AskJotCueActionKind.structuredCapture,
+      userId: userId,
+      previewTitle: _capturePreviewTitle(draft),
+      previewText: _capturePreviewText(draft),
+      captureDraft: draft,
+    );
+    return AskJotCueAnswer(
+      intent: AskJotCueIntent.action,
+      title: 'Action preview',
+      text:
+          'I understand this as a structured capture. Nothing has changed yet.',
+      actionProposal: proposal,
+    );
+  }
+
+  String? _explicitNoteText(String query) {
+    final patterns = <RegExp>[
+      RegExp(r'^remember\s+that\s+(.+)$', caseSensitive: false),
+      RegExp(
+        r'^(?:save|create)\s+(?:this\s+)?(?:as\s+)?(?:a\s+)?note\s*[:\-]?\s+(.+)$',
+        caseSensitive: false,
+      ),
+      RegExp(r'^note\s+(?:that\s+)?(.+)$', caseSensitive: false),
+    ];
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(query);
+      if (match == null) continue;
+      final text = (match.group(1) ?? '').trim();
+      if (text.isNotEmpty && text.length <= 4000) return text;
+    }
+    return null;
+  }
+
+  String _capturePreviewTitle(CaptureDraft draft) {
+    return switch (draft.kind) {
+      CaptureDraftKind.project =>
+        draft.tasks.isEmpty
+            ? 'Create project'
+            : 'Create project + ${draft.tasks.length} ${draft.tasks.length == 1 ? 'task' : 'tasks'}',
+      CaptureDraftKind.task => 'Create task',
+      CaptureDraftKind.taskList => 'Create ${draft.tasks.length} tasks',
+    };
+  }
+
+  String _capturePreviewText(CaptureDraft draft) {
+    final lines = <String>[];
+    if (draft.createsProject) {
+      lines.add('Project: ${draft.projectName ?? 'New project'}');
+    }
+    for (final task in draft.tasks) {
+      lines.add('• $task');
+    }
+    if (draft.deadline != null) {
+      lines.add('Deadline: ${_date(draft.deadline!)}');
+    }
+    return lines.join('\n');
   }
 
   AskJotCueAnswer _taskResolutionAnswer(
@@ -737,7 +836,10 @@ class AskJotCueEngine {
           '• Which projects are active?\n'
           '• Mark Revise chapter 4 done\n'
           '• Set Revise chapter 4 priority high\n'
-          '• Move Revise chapter 4 tomorrow at 15:00',
+          '• Move Revise chapter 4 tomorrow at 15:00\n'
+          '• Add task Submit HPC report by Sep 30\n'
+          '• Create project called STG App with deadline Oct 30\n'
+          '• Remember that Sarah moved the meeting to Friday',
     );
   }
 
@@ -746,7 +848,7 @@ class AskJotCueEngine {
       intent: AskJotCueIntent.unknown,
       title: 'I can help with your plan',
       text:
-          'I don’t safely understand that request yet. Ask about focus, deadlines, overdue work, capacity, schedules, projects, or review items. I can also preview a few explicit actions: Task completion, Task priority, and moving one accepted JotCue block. Unsupported requests never change anything.',
+          'I don’t safely understand that request yet. Ask about focus, deadlines, overdue work, capacity, schedules, projects, or review items. I can also preview explicit changes including Task completion, Task priority, moving one accepted JotCue block, and creating Tasks, Projects, or Notes. Unsupported requests never change anything.',
     );
   }
 }
@@ -839,6 +941,12 @@ DateTime? _parseMoveDate(String value, DateTime now) {
     return null;
   }
   return (hour, minute);
+}
+
+String _date(DateTime value) {
+  final month = value.month.toString().padLeft(2, '0');
+  final day = value.day.toString().padLeft(2, '0');
+  return '${value.year}-$month-$day';
 }
 
 String _dateTime(DateTime value) {

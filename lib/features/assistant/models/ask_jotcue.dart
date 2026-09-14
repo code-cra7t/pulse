@@ -1,4 +1,5 @@
 import '../../../core/models/priority_level.dart';
+import '../../capture/models/capture_draft.dart';
 import '../../projects/models/project.dart';
 import '../../pulse/models/daily_pulse_loop.dart';
 import '../../pulse/models/pulse_overview.dart';
@@ -21,11 +22,18 @@ enum AskJotCueIntent {
   unknown,
 }
 
-enum AskJotCueActionKind { taskCompletion, taskPriority, scheduleMove }
+enum AskJotCueActionKind {
+  taskCompletion,
+  taskPriority,
+  scheduleMove,
+  structuredCapture,
+  noteCreate,
+}
 
 class AskJotCueContext {
   const AskJotCueContext({
     required this.now,
+    this.userId,
     required this.pulse,
     required this.dailyLoop,
     required this.tasks,
@@ -36,6 +44,7 @@ class AskJotCueContext {
   });
 
   final DateTime now;
+  final String? userId;
   final PulseOverview pulse;
   final DailyPulseLoop dailyLoop;
   final List<Task> tasks;
@@ -55,6 +64,7 @@ class AskJotCueContext {
   }) {
     return AskJotCueContext(
       now: now,
+      userId: userId,
       pulse: pulse ?? this.pulse,
       dailyLoop: dailyLoop ?? this.dailyLoop,
       tasks: tasks ?? this.tasks,
@@ -75,8 +85,8 @@ class AskJotCueActionProposal {
     required this.id,
     required this.kind,
     required this.userId,
-    required this.taskId,
-    required this.taskTitle,
+    this.taskId = '',
+    this.taskTitle = '',
     required this.previewTitle,
     required this.previewText,
     this.sourceNoteId,
@@ -87,6 +97,8 @@ class AskJotCueActionProposal {
     this.fromEndsAt,
     this.toStartsAt,
     this.toEndsAt,
+    this.captureDraft,
+    this.noteText,
   });
 
   final String id;
@@ -104,6 +116,8 @@ class AskJotCueActionProposal {
   final DateTime? fromEndsAt;
   final DateTime? toStartsAt;
   final DateTime? toEndsAt;
+  final CaptureDraft? captureDraft;
+  final String? noteText;
 }
 
 class AskJotCueAnswer {

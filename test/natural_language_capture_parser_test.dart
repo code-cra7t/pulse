@@ -97,6 +97,38 @@ void main() {
     expect(draft!.deadline, DateTime(2027, 9, 10, 23, 59));
   });
 
+  test('parses explicit assistant task command', () {
+    final draft = parser.parseCommand(
+      'Add task Buy groceries by Friday',
+      now: now,
+    );
+
+    expect(draft, isNotNull);
+    expect(draft!.kind, CaptureDraftKind.task);
+    expect(draft.tasks, ['Buy groceries']);
+    expect(draft.deadline, DateTime(2026, 9, 18, 23, 59));
+  });
+
+  test('parses explicit project command with tasks and deadline', () {
+    final draft = parser.parseCommand(
+      'Create project called Her Rights website with tasks design landing page and create resource directory, due October 5',
+      now: now,
+    );
+
+    expect(draft, isNotNull);
+    expect(draft!.kind, CaptureDraftKind.project);
+    expect(draft.projectName, 'Her Rights website');
+    expect(draft.tasks, ['Design landing page', 'Create resource directory']);
+    expect(draft.deadline, DateTime(2026, 10, 5, 23, 59));
+  });
+
+  test('assistant command parser ignores ordinary prose', () {
+    expect(
+      parser.parseCommand('Write an email to my lecturer', now: now),
+      isNull,
+    );
+  });
+
   test('does not invent structure from ambiguous prose', () {
     final draft = parser.parse(
       'I have been thinking a lot about what the future should look like.',

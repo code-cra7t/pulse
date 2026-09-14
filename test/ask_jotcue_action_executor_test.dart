@@ -4,6 +4,7 @@ import 'package:pulse/features/assistant/data/ask_jotcue_action_executor.dart';
 import 'package:pulse/features/assistant/models/ask_jotcue.dart';
 import 'package:pulse/features/automation/data/automation_policy.dart';
 import 'package:pulse/features/automation/models/automation_preferences.dart';
+import 'package:pulse/features/capture/models/capture_draft.dart';
 import 'package:pulse/features/scheduling/data/schedule_blocks_repository.dart';
 import 'package:pulse/features/scheduling/models/schedule_block.dart';
 import 'package:pulse/features/scheduling/models/schedule_proposal.dart';
@@ -421,6 +422,130 @@ void main() {
         throwsA(isA<StateError>()),
       );
       expect(repository.rescheduleCalls, 0);
+    },
+  );
+
+  test(
+    'structured capture requires approval and then uses capture service path',
+    () async {
+      var calls = 0;
+      final draft = CaptureDraft(
+        kind: CaptureDraftKind.task,
+        rawText: 'Add task Buy groceries',
+        tasks: const ['Buy groceries'],
+      );
+      final proposal = AskJotCueActionProposal(
+        id: 'capture:task',
+        kind: AskJotCueActionKind.structuredCapture,
+        userId: 'user',
+        previewTitle: 'Create task',
+        previewText: '• Buy groceries',
+        captureDraft: draft,
+      );
+      final executor = AskJotCueActionExecutor(
+        policy: const AutomationPolicy(),
+        setTaskCompletion:
+            ({
+              required userId,
+              required noteId,
+              required taskId,
+              required isCompleted,
+            }) async {},
+        updateTaskMetadata:
+            ({
+              required userId,
+              required noteId,
+              required taskId,
+              required update,
+            }) async {},
+        scheduleBlocks: _FakeScheduleBlocksRepository([]),
+        isCalendarLinked: (_) async => false,
+        isScheduleMoveAvailable:
+            ({required blockId, required startsAt, required endsAt}) async =>
+                true,
+        createStructuredCapture: ({required userId, required draft}) async {
+          calls += 1;
+          expect(userId, 'user');
+          expect(draft.tasks, ['Buy groceries']);
+          return const CaptureResult(noteId: 'note', taskCount: 1);
+        },
+      );
+
+      await expectLater(
+        executor.execute(
+          preferences: const AutomationPreferences(
+            level: AutomationLevel.trusted,
+          ),
+          proposal: proposal,
+          now: now,
+          approved: false,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(calls, 0);
+
+      final result = await executor.execute(
+        preferences: const AutomationPreferences(
+          level: AutomationLevel.trusted,
+        ),
+        proposal: proposal,
+        now: now,
+        approved: true,
+      );
+      expect(calls, 1);
+      expect(result, '1 task captured.');
+    },
+  );
+
+  test(
+    'note capture uses the existing note capture callback after approval',
+    () async {
+      var saved = '';
+      final executor = AskJotCueActionExecutor(
+        policy: const AutomationPolicy(),
+        setTaskCompletion:
+            ({
+              required userId,
+              required noteId,
+              required taskId,
+              required isCompleted,
+            }) async {},
+        updateTaskMetadata:
+            ({
+              required userId,
+              required noteId,
+              required taskId,
+              required update,
+            }) async {},
+        scheduleBlocks: _FakeScheduleBlocksRepository([]),
+        isCalendarLinked: (_) async => false,
+        isScheduleMoveAvailable:
+            ({required blockId, required startsAt, required endsAt}) async =>
+                true,
+        saveCaptureAsNote: ({required userId, required rawText}) async {
+          saved = rawText;
+          return const CaptureResult(noteId: 'note', taskCount: 0);
+        },
+      );
+      const proposal = AskJotCueActionProposal(
+        id: 'note:1',
+        kind: AskJotCueActionKind.noteCreate,
+        userId: 'user',
+        previewTitle: 'Save note',
+        previewText: 'Preview',
+        noteText: 'Sarah moved the meeting to Friday',
+      );
+
+      final result = await executor.execute(
+        preferences: const AutomationPreferences(
+          level: AutomationLevel.approval,
+        ),
+        proposal: proposal,
+        now: now,
+        approved: true,
+      );
+      expect(saved, 'Sarah moved the meeting to Friday');
+      expect(result, 'Capture saved as a note.');
     },
   );
 }

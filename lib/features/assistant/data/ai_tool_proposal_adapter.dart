@@ -1,4 +1,6 @@
 import '../../../core/models/priority_level.dart';
+import '../../capture/data/natural_language_capture_parser.dart';
+import '../../capture/models/capture_draft.dart';
 import '../../scheduling/models/schedule_block.dart';
 import '../../tasks/models/task.dart';
 import '../models/ai_gateway.dart';
@@ -28,6 +30,18 @@ class AiToolProposalAdapter {
           'Preview moving one existing accepted JotCue schedule block. The local app revalidates calendar and availability before execution.',
       'arguments': {'blockId': 'string', 'startsAt': 'ISO-8601 datetime'},
     },
+    {
+      'name': 'capture.create',
+      'description':
+          'Preview a Task or Project capture. The local app parses the supplied text conservatively and requires user approval before creation.',
+      'arguments': {'text': 'string'},
+    },
+    {
+      'name': 'note.save',
+      'description':
+          'Preview saving explicit user-provided text as a captured Note.',
+      'arguments': {'text': 'string'},
+    },
   ];
 
   AskJotCueActionProposal? adapt(
@@ -38,8 +52,53 @@ class AiToolProposalAdapter {
       'task.set_completion' => _completion(call.arguments, context),
       'task.set_priority' => _priority(call.arguments, context),
       'schedule.move_block' => _move(call.arguments, context),
+      'capture.create' => _capture(call.arguments, context),
+      'note.save' => _note(call.arguments, context),
       _ => null,
     };
+  }
+
+  AskJotCueActionProposal? _capture(
+    Map<String, Object?> args,
+    AskJotCueContext context,
+  ) {
+    final userId = context.userId?.trim();
+    final text = args['text'];
+    if (userId == null || userId.isEmpty || text is! String) return null;
+    final normalized = text.trim();
+    if (normalized.isEmpty || normalized.length > 2000) return null;
+    final parser = const NaturalLanguageCaptureParser();
+    final draft =
+        parser.parseCommand(normalized, now: context.now) ??
+        parser.parse(normalized, now: context.now);
+    if (draft == null) return null;
+    return AskJotCueActionProposal(
+      id: 'capture:${draft.kind.name}:${draft.rawText.hashCode}',
+      kind: AskJotCueActionKind.structuredCapture,
+      userId: userId,
+      previewTitle: _captureTitle(draft),
+      previewText: _captureText(draft),
+      captureDraft: draft,
+    );
+  }
+
+  AskJotCueActionProposal? _note(
+    Map<String, Object?> args,
+    AskJotCueContext context,
+  ) {
+    final userId = context.userId?.trim();
+    final text = args['text'];
+    if (userId == null || userId.isEmpty || text is! String) return null;
+    final normalized = text.trim();
+    if (normalized.isEmpty || normalized.length > 4000) return null;
+    return AskJotCueActionProposal(
+      id: 'note:${normalized.hashCode}',
+      kind: AskJotCueActionKind.noteCreate,
+      userId: userId,
+      previewTitle: 'Save note',
+      previewText: 'Save this as a captured note:\n“$normalized”',
+      noteText: normalized,
+    );
   }
 
   AskJotCueActionProposal? _completion(
@@ -127,6 +186,34 @@ class AiToolProposalAdapter {
           'Move "${task.title}" from ${_format(block.startsAt)} to ${_format(startsAt)}.',
     );
   }
+}
+
+String _captureTitle(CaptureDraft draft) {
+  return switch (draft.kind) {
+    CaptureDraftKind.project =>
+      draft.tasks.isEmpty
+          ? 'Create project'
+          : 'Create project + ${draft.tasks.length} ${draft.tasks.length == 1 ? 'task' : 'tasks'}',
+    CaptureDraftKind.task => 'Create task',
+    CaptureDraftKind.taskList => 'Create ${draft.tasks.length} tasks',
+  };
+}
+
+String _captureText(CaptureDraft draft) {
+  final lines = <String>[];
+  if (draft.createsProject) {
+    lines.add('Project: ${draft.projectName ?? 'New project'}');
+  }
+  for (final task in draft.tasks) {
+    lines.add('• $task');
+  }
+  if (draft.deadline != null) {
+    final value = draft.deadline!;
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    lines.add('Deadline: ${value.year}-$month-$day');
+  }
+  return lines.join('\n');
 }
 
 Task? _task(String id, List<Task> tasks) {

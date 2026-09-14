@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/priority_level.dart';
 import '../../../core/services/app_theme.dart';
+import '../../../core/services/firebase_providers.dart';
 import '../../../core/widgets/adaptive_shell.dart';
 import '../../../core/widgets/pulse_components.dart';
 import '../../assistant/models/ai_assistant_preferences.dart';
@@ -102,25 +104,31 @@ class PulseScreen extends ConsumerWidget {
                   _PulseHeader(
                     now: currentTime,
                     displayName: displayName,
-                    onAsk: () => showAskJotCueSheet(
-                      context: context,
-                      aiPreferences: aiPreferences,
-                      gatewayConfigured: ref
-                          .read(aiGatewayClientProvider)
-                          .isConfigured,
-                      assistantContext: AskJotCueContext(
-                        now: currentTime,
-                        pulse: overview,
-                        dailyLoop: dailyLoop,
-                        tasks: tasks,
-                        projects: projects,
-                        blocks:
-                            scheduleBlocksAsync.asData?.value ??
-                            const <ScheduleBlock>[],
-                        scheduling: scheduleAsync.asData?.value,
-                        replanning: replanningAsync.asData?.value,
-                      ),
-                    ),
+                    onAsk: () {
+                      final userId = Firebase.apps.isEmpty
+                          ? null
+                          : ref.read(firebaseAuthProvider).currentUser?.uid;
+                      showAskJotCueSheet(
+                        context: context,
+                        aiPreferences: aiPreferences,
+                        gatewayConfigured: ref
+                            .read(aiGatewayClientProvider)
+                            .isConfigured,
+                        assistantContext: AskJotCueContext(
+                          now: currentTime,
+                          userId: userId,
+                          pulse: overview,
+                          dailyLoop: dailyLoop,
+                          tasks: tasks,
+                          projects: projects,
+                          blocks:
+                              scheduleBlocksAsync.asData?.value ??
+                              const <ScheduleBlock>[],
+                          scheduling: scheduleAsync.asData?.value,
+                          replanning: replanningAsync.asData?.value,
+                        ),
+                      );
+                    },
                     onCapture: () =>
                         showNaturalLanguageCaptureSheet(context: context),
                     onOpenPlan: onOpenPlan,
