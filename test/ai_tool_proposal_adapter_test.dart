@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pulse/features/assistant/data/ai_tool_proposal_adapter.dart';
 import 'package:pulse/features/assistant/models/ai_gateway.dart';
 import 'package:pulse/features/assistant/models/ask_jotcue.dart';
+import 'package:pulse/features/projects/models/project.dart';
 import 'package:pulse/features/pulse/models/daily_pulse_loop.dart';
 import 'package:pulse/features/pulse/models/pulse_overview.dart';
 import 'package:pulse/features/scheduling/models/schedule_block.dart';
@@ -26,6 +27,21 @@ void main() {
     sourceNoteId: 'note',
     sourceLineIndex: 0,
   );
+  final prerequisite = Task(
+    id: 'prereq',
+    userId: 'user',
+    title: 'Finish CV',
+    isCompleted: false,
+    sourceNoteId: 'note-prereq',
+    sourceLineIndex: 0,
+  );
+  final project = Project(
+    id: 'project',
+    userId: 'user',
+    name: 'Applications',
+    createdAt: now,
+    updatedAt: now,
+  );
   final block = ScheduleBlock(
     id: 'block',
     userId: 'user',
@@ -41,8 +57,8 @@ void main() {
     userId: 'user',
     pulse: pulse,
     dailyLoop: DailyPulseLoop.build(now: now, pulse: pulse, blocks: [block]),
-    tasks: [task],
-    projects: const [],
+    tasks: [task, prerequisite],
+    projects: [project],
     blocks: [block],
   );
   const adapter = AiToolProposalAdapter();
@@ -84,6 +100,97 @@ void main() {
       ),
       isNull,
     );
+  });
+
+  test('deadline tool rebuilds a local metadata proposal', () {
+    final proposal = adapter.adapt(
+      const AiGatewayToolCall(
+        name: 'task.set_deadline',
+        arguments: {'taskId': 'task', 'dueAt': '2026-09-30', 'clear': false},
+      ),
+      context,
+    );
+
+    expect(proposal?.kind, AskJotCueActionKind.taskMetadata);
+    expect(proposal?.metadataUpdate?.dueAt, DateTime(2026, 9, 30, 23, 59));
+  });
+
+  test('project tool resolves project ID against current local state', () {
+    final proposal = adapter.adapt(
+      const AiGatewayToolCall(
+        name: 'task.assign_project',
+        arguments: {'taskId': 'task', 'projectId': 'project', 'clear': false},
+      ),
+      context,
+    );
+
+    expect(proposal?.metadataUpdate?.projectId, 'project');
+    expect(
+      adapter.adapt(
+        const AiGatewayToolCall(
+          name: 'task.assign_project',
+          arguments: {'taskId': 'task', 'projectId': 'missing', 'clear': false},
+        ),
+        context,
+      ),
+      isNull,
+    );
+  });
+
+  test('dependency tool rejects self and stale IDs', () {
+    final proposal = adapter.adapt(
+      const AiGatewayToolCall(
+        name: 'task.set_dependencies',
+        arguments: {
+          'taskId': 'task',
+          'dependsOnTaskIds': ['prereq'],
+        },
+      ),
+      context,
+    );
+    expect(proposal?.metadataUpdate?.dependsOnTaskIds, ['prereq']);
+
+    expect(
+      adapter.adapt(
+        const AiGatewayToolCall(
+          name: 'task.set_dependencies',
+          arguments: {
+            'taskId': 'task',
+            'dependsOnTaskIds': ['task'],
+          },
+        ),
+        context,
+      ),
+      isNull,
+    );
+    expect(
+      adapter.adapt(
+        const AiGatewayToolCall(
+          name: 'task.set_dependencies',
+          arguments: {
+            'taskId': 'task',
+            'dependsOnTaskIds': ['missing'],
+          },
+        ),
+        context,
+      ),
+      isNull,
+    );
+  });
+
+  test('waiting-for tool enforces bounded explicit text', () {
+    final proposal = adapter.adapt(
+      const AiGatewayToolCall(
+        name: 'task.set_waiting_for',
+        arguments: {
+          'taskId': 'task',
+          'waitingFor': 'supervisor feedback',
+          'clear': false,
+        },
+      ),
+      context,
+    );
+    expect(proposal?.metadataUpdate?.waitingFor, 'supervisor feedback');
   });
 
   test('schedule tool preserves current block duration', () {

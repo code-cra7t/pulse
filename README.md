@@ -12,7 +12,7 @@ planning signals.
 - Offline-first projects and task planning metadata
 - Plan workspace for projects, deadlines, priorities, effort, and flexibility
 - Pulse workspace for deterministic daily focus and attention cues
-- Ask JotCue: a local-first conversational planning view with optional Hybrid AI fallback and preview-first Task completion, Task priority, and local schedule-move actions
+- Ask JotCue: a local-first conversational planning view with optional Hybrid AI fallback and preview-first Task completion, Task planning metadata, capture, and local schedule-move actions
 - Read-only Android/iOS calendar availability and deterministic scheduling proposals
 - Derived on-device Personal Graph across Notes, Tasks, Projects, deadlines, and accepted schedule blocks
 - User-defined planning windows, breaks, daily focus limits, and protected lunch
@@ -109,7 +109,7 @@ Ask JotCue can deterministically interpret three explicit user commands: mark a 
 
 
 ### Hybrid AI / tool-calling foundation (Patch 22)
-Ask JotCue can optionally use a build-configured HTTPS gateway after deterministic local reasoning declines a query. Hybrid mode is off by default per device. The gateway receives a bounded structured planning snapshot rather than raw Notes or calendar events, and it can only return prose or one of the allow-listed Task completion, Task priority, or local schedule-move tool suggestions. Tool output never executes directly: JotCue resolves current local IDs, rebuilds a local action preview, applies the existing automation policy, and keeps the explicit Apply step. No provider secret is stored in the Flutter client and no chat history is persisted.
+Ask JotCue can optionally use a build-configured HTTPS gateway after deterministic local reasoning declines a query. Hybrid mode is off by default per device. The gateway receives a bounded structured planning snapshot rather than raw Notes or calendar events, and it can only return prose or one of the allow-listed Task completion, Task planning, capture, or local schedule-move tool suggestions. Tool output never executes directly: JotCue resolves current local IDs, rebuilds a local action preview, applies the existing automation policy, and keeps the explicit Apply step. No provider secret is stored in the Flutter client and no chat history is persisted.
 
 
 ### Cross-device schedule sync (Patch 23)
@@ -123,3 +123,6 @@ Modern Notes protect hidden Task identity metadata with a schema version and per
 
 ### Assistant capture actions (Patch 26)
 Ask JotCue can now prepare review-first creation previews for Tasks, Projects, task lists, and captured Notes. Explicit local commands are parsed deterministically before Hybrid AI; optional Hybrid tool calls are rebuilt through the same local capture validation. Nothing is created when the user presses Send: Observe exposes no executable action, Suggest remains preview-only, and Approval/Trusted require the explicit Apply tap. Creation reuses the existing offline-first `CaptureService`, and `structuredCaptureCreate` remains always approval-required.
+
+### Assistant planning actions (Patch 27)
+Ask JotCue can now preview Task deadline changes, Project assignment/removal, effort estimates, prerequisite changes, and `Waiting for` updates through the existing hidden Task metadata model. Local commands resolve current Task/Project names conservatively and never guess ambiguous targets. Hybrid planning tools are rebuilt against current local IDs before a preview exists. All planning updates continue through `TaskMetadataUpdate` and `TaskService.updateMetadata`, remain approval-required at every automation level, and preserve visible Note text as the source of truth.

@@ -41,6 +41,8 @@ void main() {
     int? estimatedMinutes = 90,
     String? projectId = 'project',
     bool isCompleted = false,
+    List<String> dependsOnTaskIds = const <String>[],
+    String? waitingFor,
   }) {
     return Task(
       id: id,
@@ -53,6 +55,8 @@ void main() {
       dueAt: dueAt,
       priority: priority,
       estimatedMinutes: estimatedMinutes,
+      dependsOnTaskIds: dependsOnTaskIds,
+      waitingFor: waitingFor,
     );
   }
 
@@ -347,6 +351,114 @@ void main() {
     expect(answer.actionProposal!.kind, AskJotCueActionKind.taskPriority);
     expect(answer.actionProposal!.targetPriority, PriorityLevel.critical);
     expect(answer.actionProposal!.previewText, contains('critical priority'));
+  });
+
+  test('deadline planning action sets and clears Task due date', () {
+    final set = engine.answer(
+      query: 'Set Revise chapter 4 due Sep 30',
+      context: context(),
+    );
+
+    expect(set.actionProposal?.kind, AskJotCueActionKind.taskMetadata);
+    expect(
+      set.actionProposal?.metadataUpdate?.dueAt,
+      DateTime(2026, 9, 30, 23, 59),
+    );
+
+    final clear = engine.answer(
+      query: 'Clear deadline for Revise chapter 4',
+      context: context(),
+    );
+    expect(clear.actionProposal?.metadataUpdate?.clearDueAt, isTrue);
+  });
+
+  test('project planning action resolves a unique current Project', () {
+    final answer = engine.answer(
+      query: 'Put Revise chapter 4 under Thesis',
+      context: context(
+        tasks: [task(projectId: null)],
+        projects: [project(id: 'thesis', name: 'Thesis')],
+      ),
+    );
+
+    expect(answer.actionProposal?.kind, AskJotCueActionKind.taskMetadata);
+    expect(answer.actionProposal?.metadataUpdate?.projectId, 'thesis');
+  });
+
+  test('ambiguous project assignment never guesses a Project', () {
+    final answer = engine.answer(
+      query: 'Put Revise chapter 4 under Thesis',
+      context: context(
+        tasks: [task(projectId: null)],
+        projects: [
+          project(id: 'one', name: 'Thesis Draft'),
+          project(id: 'two', name: 'Thesis Research'),
+        ],
+      ),
+    );
+
+    expect(answer.actionProposal, isNull);
+    expect(answer.text, contains('More than one Project matches'));
+  });
+
+  test('effort planning action parses hours into minutes', () {
+    final answer = engine.answer(
+      query: 'Set Revise chapter 4 estimate to 2 hours',
+      context: context(),
+    );
+
+    expect(answer.actionProposal?.kind, AskJotCueActionKind.taskMetadata);
+    expect(answer.actionProposal?.metadataUpdate?.estimatedMinutes, 120);
+  });
+
+  test('dependency planning action preserves existing prerequisites', () {
+    final answer = engine.answer(
+      query: 'Make Submit application depend on Finish CV',
+      context: context(
+        tasks: [
+          task(
+            id: 'application',
+            title: 'Submit application',
+            dependsOnTaskIds: const ['reference'],
+          ),
+          task(id: 'cv', title: 'Finish CV'),
+          task(id: 'reference', title: 'Get reference'),
+        ],
+      ),
+    );
+
+    expect(answer.actionProposal?.kind, AskJotCueActionKind.taskMetadata);
+    expect(answer.actionProposal?.metadataUpdate?.dependsOnTaskIds, [
+      'reference',
+      'cv',
+    ]);
+  });
+
+  test('dependency planning action rejects self dependency', () {
+    final answer = engine.answer(
+      query: 'Make Revise chapter 4 depend on Revise chapter 4',
+      context: context(),
+    );
+
+    expect(answer.actionProposal, isNull);
+    expect(answer.title, 'Invalid dependency');
+  });
+
+  test('waiting-for planning action sets and clears blocker text', () {
+    final set = engine.answer(
+      query: 'Revise chapter 4 is waiting for supervisor feedback',
+      context: context(),
+    );
+    expect(
+      set.actionProposal?.metadataUpdate?.waitingFor,
+      'supervisor feedback',
+    );
+
+    final clear = engine.answer(
+      query: 'Clear waiting for Revise chapter 4',
+      context: context(tasks: [task(waitingFor: 'supervisor feedback')]),
+    );
+    expect(clear.actionProposal?.metadataUpdate?.clearWaitingFor, isTrue);
   });
 
   test('schedule move preserves duration and targets a future time', () {

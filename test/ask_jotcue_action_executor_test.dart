@@ -245,6 +245,71 @@ void main() {
   );
 
   test(
+    'planning metadata update is approval-gated and uses TaskMetadataUpdate',
+    () async {
+      TaskMetadataUpdate? captured;
+      final executor = AskJotCueActionExecutor(
+        policy: const AutomationPolicy(),
+        setTaskCompletion:
+            ({
+              required userId,
+              required noteId,
+              required taskId,
+              required isCompleted,
+            }) async {},
+        updateTaskMetadata:
+            ({
+              required userId,
+              required noteId,
+              required taskId,
+              required update,
+            }) async {
+              captured = update;
+            },
+        scheduleBlocks: _FakeScheduleBlocksRepository([]),
+        isCalendarLinked: (_) async => false,
+        isScheduleMoveAvailable:
+            ({required blockId, required startsAt, required endsAt}) async =>
+                true,
+      );
+      final proposal = AskJotCueActionProposal(
+        id: 'metadata:task:deadline',
+        kind: AskJotCueActionKind.taskMetadata,
+        userId: 'user',
+        taskId: 'task',
+        taskTitle: 'Revise chapter 4',
+        sourceNoteId: 'note',
+        metadataUpdate: TaskMetadataUpdate(
+          dueAt: DateTime(2026, 9, 30, 23, 59),
+        ),
+        previewTitle: 'Set deadline',
+        previewText: 'Preview',
+      );
+
+      expect(
+        executor.decisionFor(
+          preferences: const AutomationPreferences(
+            level: AutomationLevel.trusted,
+          ),
+          proposal: proposal,
+        ),
+        AutomationDecision.requiresApproval,
+      );
+
+      await executor.execute(
+        preferences: const AutomationPreferences(
+          level: AutomationLevel.approval,
+        ),
+        proposal: proposal,
+        now: now,
+        approved: true,
+      );
+
+      expect(captured?.dueAt, DateTime(2026, 9, 30, 23, 59));
+    },
+  );
+
+  test(
     'trusted local schedule move still waits for the Ask JotCue Apply tap',
     () async {
       final repository = _FakeScheduleBlocksRepository([scheduledBlock()]);

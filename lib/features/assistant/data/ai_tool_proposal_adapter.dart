@@ -3,6 +3,7 @@ import '../../capture/data/natural_language_capture_parser.dart';
 import '../../capture/models/capture_draft.dart';
 import '../../scheduling/models/schedule_block.dart';
 import '../../tasks/models/task.dart';
+import '../../tasks/models/task_metadata_update.dart';
 import '../models/ai_gateway.dart';
 import '../models/ask_jotcue.dart';
 
@@ -22,6 +23,52 @@ class AiToolProposalAdapter {
       'arguments': {
         'taskId': 'string',
         'priority': 'none|low|medium|high|critical',
+      },
+    },
+    {
+      'name': 'task.set_deadline',
+      'description':
+          'Preview setting or clearing the deadline for one existing task.',
+      'arguments': {
+        'taskId': 'string',
+        'dueAt': 'ISO-8601 date or datetime',
+        'clear': 'boolean',
+      },
+    },
+    {
+      'name': 'task.assign_project',
+      'description':
+          'Preview assigning one existing task to one existing project, or clearing its project.',
+      'arguments': {
+        'taskId': 'string',
+        'projectId': 'string',
+        'clear': 'boolean',
+      },
+    },
+    {
+      'name': 'task.set_estimate',
+      'description':
+          'Preview setting or clearing the positive estimated minutes for one existing task.',
+      'arguments': {
+        'taskId': 'string',
+        'minutes': 'integer',
+        'clear': 'boolean',
+      },
+    },
+    {
+      'name': 'task.set_dependencies',
+      'description':
+          'Preview replacing the prerequisite task IDs for one existing task. IDs must refer to current local tasks.',
+      'arguments': {'taskId': 'string', 'dependsOnTaskIds': 'string[]'},
+    },
+    {
+      'name': 'task.set_waiting_for',
+      'description':
+          'Preview setting or clearing short Waiting for text for one existing task.',
+      'arguments': {
+        'taskId': 'string',
+        'waitingFor': 'string',
+        'clear': 'boolean',
       },
     },
     {
@@ -51,6 +98,11 @@ class AiToolProposalAdapter {
     return switch (call.name) {
       'task.set_completion' => _completion(call.arguments, context),
       'task.set_priority' => _priority(call.arguments, context),
+      'task.set_deadline' => _deadline(call.arguments, context),
+      'task.assign_project' => _project(call.arguments, context),
+      'task.set_estimate' => _estimate(call.arguments, context),
+      'task.set_dependencies' => _dependencies(call.arguments, context),
+      'task.set_waiting_for' => _waitingFor(call.arguments, context),
       'schedule.move_block' => _move(call.arguments, context),
       'capture.create' => _capture(call.arguments, context),
       'note.save' => _note(call.arguments, context),
@@ -150,6 +202,190 @@ class AiToolProposalAdapter {
     );
   }
 
+  AskJotCueActionProposal? _deadline(
+    Map<String, Object?> args,
+    AskJotCueContext context,
+  ) {
+    final task = _taskArg(args, context);
+    if (task == null) return null;
+    final clear = args['clear'] == true;
+    if (clear) {
+      if (task.dueAt == null) return null;
+      return _metadataProposal(
+        task,
+        idSuffix: 'deadline:clear',
+        update: const TaskMetadataUpdate(clearDueAt: true),
+        previewTitle: 'Clear deadline',
+        previewText: 'Remove the deadline from "${task.title}".',
+      );
+    }
+    final raw = args['dueAt'];
+    if (raw is! String) return null;
+    final dueAt = _parseToolDueAt(raw);
+    if (dueAt == null || _sameDate(task.dueAt, dueAt)) return null;
+    return _metadataProposal(
+      task,
+      idSuffix: 'deadline:${dueAt.millisecondsSinceEpoch}',
+      update: TaskMetadataUpdate(dueAt: dueAt),
+      previewTitle: 'Set deadline',
+      previewText: 'Set "${task.title}" due ${_formatDate(dueAt)}.',
+    );
+  }
+
+  AskJotCueActionProposal? _project(
+    Map<String, Object?> args,
+    AskJotCueContext context,
+  ) {
+    final task = _taskArg(args, context);
+    if (task == null) return null;
+    final clear = args['clear'] == true;
+    if (clear) {
+      if (task.projectId == null) return null;
+      return _metadataProposal(
+        task,
+        idSuffix: 'project:clear',
+        update: const TaskMetadataUpdate(clearProjectId: true),
+        previewTitle: 'Remove from project',
+        previewText: 'Remove "${task.title}" from its current Project.',
+      );
+    }
+    final projectId = args['projectId'];
+    if (projectId is! String || projectId.trim().isEmpty) return null;
+    final project = context.projects
+        .where((item) => item.id == projectId)
+        .toList();
+    if (project.length != 1 || task.projectId == projectId) return null;
+    return _metadataProposal(
+      task,
+      idSuffix: 'project:$projectId',
+      update: TaskMetadataUpdate(projectId: projectId),
+      previewTitle: 'Assign to project',
+      previewText: 'Assign "${task.title}" to ${project.single.name}.',
+    );
+  }
+
+  AskJotCueActionProposal? _estimate(
+    Map<String, Object?> args,
+    AskJotCueContext context,
+  ) {
+    final task = _taskArg(args, context);
+    if (task == null) return null;
+    final clear = args['clear'] == true;
+    if (clear) {
+      if (task.estimatedMinutes == null) return null;
+      return _metadataProposal(
+        task,
+        idSuffix: 'estimate:clear',
+        update: const TaskMetadataUpdate(clearEstimatedMinutes: true),
+        previewTitle: 'Clear effort estimate',
+        previewText: 'Remove the effort estimate from "${task.title}".',
+      );
+    }
+    final raw = args['minutes'];
+    if (raw is! int ||
+        raw <= 0 ||
+        raw > 10080 ||
+        task.estimatedMinutes == raw) {
+      return null;
+    }
+    return _metadataProposal(
+      task,
+      idSuffix: 'estimate:$raw',
+      update: TaskMetadataUpdate(estimatedMinutes: raw),
+      previewTitle: 'Set effort estimate',
+      previewText: 'Set "${task.title}" to $raw estimated minutes.',
+    );
+  }
+
+  AskJotCueActionProposal? _dependencies(
+    Map<String, Object?> args,
+    AskJotCueContext context,
+  ) {
+    final task = _taskArg(args, context);
+    final raw = args['dependsOnTaskIds'];
+    if (task == null || raw is! List) return null;
+    final known = context.tasks.map((item) => item.id).toSet();
+    final dependencies = <String>[];
+    final seen = <String>{};
+    for (final value in raw) {
+      if (value is! String) return null;
+      final id = value.trim();
+      if (id.isEmpty || id == task.id || !known.contains(id)) return null;
+      if (seen.add(id)) dependencies.add(id);
+    }
+    if (_sameStringList(task.dependsOnTaskIds, dependencies)) return null;
+    return _metadataProposal(
+      task,
+      idSuffix: 'dependencies:${dependencies.join(',')}',
+      update: TaskMetadataUpdate(dependsOnTaskIds: dependencies),
+      previewTitle: 'Update prerequisites',
+      previewText:
+          'Replace prerequisites for "${task.title}" with ${dependencies.length} ${dependencies.length == 1 ? 'task' : 'tasks'}.',
+    );
+  }
+
+  AskJotCueActionProposal? _waitingFor(
+    Map<String, Object?> args,
+    AskJotCueContext context,
+  ) {
+    final task = _taskArg(args, context);
+    if (task == null) return null;
+    final clear = args['clear'] == true;
+    if (clear) {
+      if (task.waitingFor == null || task.waitingFor!.trim().isEmpty) {
+        return null;
+      }
+      return _metadataProposal(
+        task,
+        idSuffix: 'waiting:clear',
+        update: const TaskMetadataUpdate(clearWaitingFor: true),
+        previewTitle: 'Clear waiting for',
+        previewText: 'Clear Waiting for on "${task.title}".',
+      );
+    }
+    final waitingFor = args['waitingFor'];
+    if (waitingFor is! String) return null;
+    final normalized = waitingFor.trim();
+    if (normalized.isEmpty || normalized.length > 200) return null;
+    if ((task.waitingFor ?? '').trim().toLowerCase() ==
+        normalized.toLowerCase()) {
+      return null;
+    }
+    return _metadataProposal(
+      task,
+      idSuffix: 'waiting:${normalized.hashCode}',
+      update: TaskMetadataUpdate(waitingFor: normalized),
+      previewTitle: 'Set waiting for',
+      previewText: 'Mark "${task.title}" as waiting for $normalized.',
+    );
+  }
+
+  Task? _taskArg(Map<String, Object?> args, AskJotCueContext context) {
+    final taskId = args['taskId'];
+    if (taskId is! String) return null;
+    return _task(taskId, context.tasks);
+  }
+
+  AskJotCueActionProposal _metadataProposal(
+    Task task, {
+    required String idSuffix,
+    required TaskMetadataUpdate update,
+    required String previewTitle,
+    required String previewText,
+  }) {
+    return AskJotCueActionProposal(
+      id: 'metadata:${task.id}:$idSuffix',
+      kind: AskJotCueActionKind.taskMetadata,
+      userId: task.userId,
+      taskId: task.id,
+      taskTitle: task.title,
+      sourceNoteId: task.sourceNoteId,
+      metadataUpdate: update,
+      previewTitle: previewTitle,
+      previewText: previewText,
+    );
+  }
+
   AskJotCueActionProposal? _move(
     Map<String, Object?> args,
     AskJotCueContext context,
@@ -236,6 +472,34 @@ PriorityLevel? _priorityFromName(String value) {
     if (priority.name == normalized) return priority;
   }
   return null;
+}
+
+DateTime? _parseToolDueAt(String value) {
+  final normalized = value.trim();
+  if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(normalized)) {
+    final parsed = DateTime.tryParse(normalized);
+    if (parsed == null) return null;
+    return DateTime(parsed.year, parsed.month, parsed.day, 23, 59);
+  }
+  return DateTime.tryParse(normalized)?.toLocal();
+}
+
+bool _sameDate(DateTime? a, DateTime b) {
+  return a != null && a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+bool _sameStringList(List<String> a, List<String> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i += 1) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+String _formatDate(DateTime value) {
+  final month = value.month.toString().padLeft(2, '0');
+  final day = value.day.toString().padLeft(2, '0');
+  return '${value.year}-$month-$day';
 }
 
 String _format(DateTime value) {

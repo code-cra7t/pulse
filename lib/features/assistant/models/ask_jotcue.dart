@@ -7,6 +7,7 @@ import '../../scheduling/models/replanning_overview.dart';
 import '../../scheduling/models/schedule_block.dart';
 import '../../scheduling/models/scheduling_day_state.dart';
 import '../../tasks/models/task.dart';
+import '../../tasks/models/task_metadata_update.dart';
 
 enum AskJotCueIntent {
   action,
@@ -25,6 +26,7 @@ enum AskJotCueIntent {
 enum AskJotCueActionKind {
   taskCompletion,
   taskPriority,
+  taskMetadata,
   scheduleMove,
   structuredCapture,
   noteCreate,
@@ -92,6 +94,7 @@ class AskJotCueActionProposal {
     this.sourceNoteId,
     this.targetCompletion,
     this.targetPriority,
+    this.metadataUpdate,
     this.blockId,
     this.fromStartsAt,
     this.fromEndsAt,
@@ -111,6 +114,7 @@ class AskJotCueActionProposal {
   final String? sourceNoteId;
   final bool? targetCompletion;
   final PriorityLevel? targetPriority;
+  final TaskMetadataUpdate? metadataUpdate;
   final String? blockId;
   final DateTime? fromStartsAt;
   final DateTime? fromEndsAt;

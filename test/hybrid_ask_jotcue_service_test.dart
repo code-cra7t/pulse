@@ -176,6 +176,42 @@ void main() {
     },
   );
 
+  test(
+    'hybrid planning tool becomes the same approval-gated metadata proposal',
+    () async {
+      final gateway = _FakeGateway(
+        response: const AiGatewayResponse(
+          toolCall: AiGatewayToolCall(
+            name: 'task.set_deadline',
+            arguments: {
+              'taskId': 'task',
+              'dueAt': '2026-09-30',
+              'clear': false,
+            },
+          ),
+        ),
+      );
+      final service = HybridAskJotCueService(
+        localEngine: const AskJotCueEngine(),
+        gateway: gateway,
+      );
+      final answer = await service.answer(
+        query:
+            'Could you make sure chapter four is due at the end of September?',
+        context: context,
+        preferences: const AiAssistantPreferences(mode: AiAssistantMode.hybrid),
+      );
+
+      expect(gateway.calls, 1);
+      expect(answer.usedRemoteAi, isTrue);
+      expect(answer.actionProposal?.kind, AskJotCueActionKind.taskMetadata);
+      expect(
+        answer.actionProposal?.metadataUpdate?.dueAt,
+        DateTime(2026, 9, 30, 23, 59),
+      );
+    },
+  );
+
   test('hybrid tool response becomes ordinary local action proposal', () async {
     final gateway = _FakeGateway(
       response: const AiGatewayResponse(

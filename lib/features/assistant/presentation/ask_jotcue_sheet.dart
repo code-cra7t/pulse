@@ -7,6 +7,8 @@ import '../../automation/providers/automation_providers.dart';
 import '../../pulse/models/daily_pulse_loop.dart';
 import '../../pulse/models/pulse_overview.dart';
 import '../../tasks/data/task_dependency_analyzer.dart';
+import '../../tasks/models/task.dart';
+import '../../tasks/models/task_metadata_update.dart';
 import '../models/ai_assistant_preferences.dart';
 import '../models/ask_jotcue.dart';
 import '../providers/assistant_providers.dart';
@@ -355,6 +357,15 @@ class _AskJotCueSheetState extends ConsumerState<AskJotCueSheet> {
           else
             task,
       ];
+    } else if (proposal.kind == AskJotCueActionKind.taskMetadata &&
+        proposal.metadataUpdate != null) {
+      tasks = [
+        for (final task in tasks)
+          if (task.id == proposal.taskId)
+            _applyMetadataUpdateToTask(task, proposal.metadataUpdate!)
+          else
+            task,
+      ];
     } else if (proposal.kind == AskJotCueActionKind.scheduleMove &&
         proposal.blockId != null &&
         proposal.toStartsAt != null &&
@@ -592,9 +603,48 @@ AutomationActionKind _policyActionFor(AskJotCueActionKind kind) {
   return switch (kind) {
     AskJotCueActionKind.taskCompletion =>
       AutomationActionKind.workReviewDecision,
-    AskJotCueActionKind.taskPriority => AutomationActionKind.taskPlanningUpdate,
+    AskJotCueActionKind.taskPriority ||
+    AskJotCueActionKind.taskMetadata => AutomationActionKind.taskPlanningUpdate,
     AskJotCueActionKind.scheduleMove => AutomationActionKind.localScheduleMove,
     AskJotCueActionKind.structuredCapture || AskJotCueActionKind.noteCreate =>
       AutomationActionKind.structuredCaptureCreate,
   };
+}
+
+Task _applyMetadataUpdateToTask(Task task, TaskMetadataUpdate update) {
+  var next = task;
+  if (update.clearProjectId) {
+    next = next.copyWith(projectId: null);
+  } else if (update.projectId != null) {
+    next = next.copyWith(projectId: update.projectId);
+  }
+
+  if (update.clearDueAt) {
+    next = next.copyWith(dueAt: null);
+  } else if (update.dueAt != null) {
+    next = next.copyWith(dueAt: update.dueAt);
+  }
+
+  if (update.priority != null) {
+    next = next.copyWith(priority: update.priority);
+  }
+
+  if (update.clearEstimatedMinutes) {
+    next = next.copyWith(estimatedMinutes: null);
+  } else if (update.estimatedMinutes != null) {
+    next = next.copyWith(estimatedMinutes: update.estimatedMinutes);
+  }
+
+  if (update.isFlexible != null) {
+    next = next.copyWith(isFlexible: update.isFlexible);
+  }
+  if (update.dependsOnTaskIds != null) {
+    next = next.copyWith(dependsOnTaskIds: update.dependsOnTaskIds);
+  }
+  if (update.clearWaitingFor) {
+    next = next.copyWith(waitingFor: null);
+  } else if (update.waitingFor != null) {
+    next = next.copyWith(waitingFor: update.waitingFor);
+  }
+  return next;
 }

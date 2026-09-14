@@ -108,6 +108,8 @@ class AskJotCueActionExecutor {
         return _setCompletion(proposal);
       case AskJotCueActionKind.taskPriority:
         return _setPriority(proposal);
+      case AskJotCueActionKind.taskMetadata:
+        return _setMetadata(proposal);
       case AskJotCueActionKind.scheduleMove:
         return _moveSchedule(proposal, now);
       case AskJotCueActionKind.structuredCapture:
@@ -147,6 +149,22 @@ class AskJotCueActionExecutor {
       update: TaskMetadataUpdate(priority: priority),
     );
     return 'Set "${proposal.taskTitle}" to ${_priorityLabel(priority)} priority.';
+  }
+
+  Future<String> _setMetadata(AskJotCueActionProposal proposal) async {
+    final noteId = proposal.sourceNoteId;
+    final update = proposal.metadataUpdate;
+    if (noteId == null || noteId.isEmpty || update == null) {
+      throw StateError('The planning preview is incomplete.');
+    }
+    update.validate();
+    await _updateTaskMetadata(
+      userId: proposal.userId,
+      noteId: noteId,
+      taskId: proposal.taskId,
+      update: update,
+    );
+    return 'Updated planning details for "${proposal.taskTitle}".';
   }
 
   Future<String> _createCapture(AskJotCueActionProposal proposal) async {
@@ -263,7 +281,8 @@ AutomationActionKind _policyAction(AskJotCueActionKind kind) {
   return switch (kind) {
     AskJotCueActionKind.taskCompletion =>
       AutomationActionKind.workReviewDecision,
-    AskJotCueActionKind.taskPriority => AutomationActionKind.taskPlanningUpdate,
+    AskJotCueActionKind.taskPriority ||
+    AskJotCueActionKind.taskMetadata => AutomationActionKind.taskPlanningUpdate,
     AskJotCueActionKind.scheduleMove => AutomationActionKind.localScheduleMove,
     AskJotCueActionKind.structuredCapture || AskJotCueActionKind.noteCreate =>
       AutomationActionKind.structuredCaptureCreate,

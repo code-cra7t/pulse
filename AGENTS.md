@@ -14,7 +14,7 @@ Current product surfaces:
 - Reminders (manual + smart)
 - Plan (projects + task planning metadata)
 - Pulse (deterministic daily focus and attention cues)
-- Ask JotCue (deterministic on-device planning assistant with narrowly typed, preview-first actions, including review-first Task/Project/Note capture)
+- Ask JotCue (deterministic on-device planning assistant with narrowly typed, preview-first actions, including Task planning metadata and review-first Task/Project/Note capture)
 - Personal Graph (derived local relationships across notes, tasks, projects, deadlines, and accepted schedule blocks)
 - External text sharing into the review-first Quick Capture flow (Android and iOS)
 - Suggested scheduling (explicit availability + local calendar busy time + user-approved accepted JotCue blocks with an offline local cache)
@@ -29,7 +29,7 @@ Rules:
 - Visible note content remains the source of truth for note-backed task text and completion.
 - Planning metadata must not rewrite visible note text.
 - Prefer deterministic planning logic before introducing AI-generated decisions.
-- Ask JotCue is local-first and ephemeral. Deterministic parsing/answers always run before optional Hybrid AI. Hybrid is device-local opt-in, may contact only the build-configured JotCue AI gateway, and must never persist chat history. Remote output may propose only the current allow-listed typed actions; Patch 26 adds review-first structured capture and Note capture alongside Task completion, Task priority, and accepted-block moves. Typing a request never executes it.
+- Ask JotCue is local-first and ephemeral. Deterministic parsing/answers always run before optional Hybrid AI. Hybrid is device-local opt-in, may contact only the build-configured JotCue AI gateway, and must never persist chat history. Remote output may propose only the current allow-listed typed actions; Patch 27 extends the review-first Task planning surface to deadlines, Project assignment, effort estimates, prerequisites, and Waiting for alongside completion, priority, accepted-block moves, and Patch 26 capture actions. Typing a request never executes it.
 - Do not introduce a fixed bot-face avatar for Ask JotCue; use JotCue brand language until a later personalized assistant-identity system is explicitly designed.
 - Preserve offline-first behavior.
 - Do not deploy Firebase rules unless explicitly instructed.
@@ -160,3 +160,11 @@ Trusted automation rules:
 - Hybrid capture output is untrusted. `capture.create` supplies text that the local parser must accept before a proposal exists; `note.save` may only preview non-empty bounded text. Neither tool executes remotely.
 - The signed-in user ID is supplied locally to the assistant context only for execution ownership and must not be added to minimized remote AI context.
 - Successful capture execution goes through the existing offline-first capture service. Do not mutate visible Notes, project/task stores, or Firestore directly from the assistant executor.
+
+## Patch 27 assistant-planning guardrails
+- Reuse `TaskMetadataUpdate` plus `TaskService.updateMetadata`; Ask JotCue must not create a second Task-planning persistence path.
+- Planning commands are preview-first. Typing or sending a command never changes Task metadata; Observe exposes no action, Suggest remains non-executable, and Approval/Trusted require the explicit Apply tap.
+- Patch 27 may update only deadline, Project assignment, estimated minutes, prerequisite Task IDs, and `waitingFor`. It does not broaden Trusted execution; `AutomationActionKind.taskPlanningUpdate` remains always approval-required.
+- Resolve Task and Project names conservatively. Ambiguous or missing names must fail closed instead of guessing. Prerequisite IDs must resolve to current Tasks, self-dependencies are forbidden, and the existing Task service remains responsible for missing-dependency/cycle validation at execution time.
+- Hybrid planning output is untrusted. Accept only allow-listed planning tools, resolve all IDs against current local state, rebuild a local `AskJotCueActionProposal`, and pass execution through the same automation policy and Task service.
+- Keep `waitingFor` text bounded and explicit. Do not infer or persist people/entities beyond the text the user supplied; Personal Graph entity extraction belongs to a later patch.

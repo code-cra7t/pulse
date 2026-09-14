@@ -1,8 +1,10 @@
 import '../../../core/models/priority_level.dart';
 import '../../capture/data/natural_language_capture_parser.dart';
 import '../../capture/models/capture_draft.dart';
+import '../../projects/models/project.dart';
 import '../../scheduling/models/schedule_block.dart';
 import '../../tasks/models/task.dart';
+import '../../tasks/models/task_metadata_update.dart';
 import '../models/ask_jotcue.dart';
 
 /// Deterministic assistant over JotCue's existing planning state.
@@ -139,6 +141,9 @@ class AskJotCueEngine {
 
     final priority = _priorityAction(trimmed, context);
     if (priority != null) return priority;
+
+    final planning = _planningMetadataAction(trimmed, context);
+    if (planning != null) return planning;
 
     final move = _scheduleMoveAction(trimmed, context);
     if (move != null) return move;
@@ -283,6 +288,480 @@ class AskJotCueEngine {
       );
     }
     return null;
+  }
+
+  AskJotCueAnswer? _planningMetadataAction(
+    String query,
+    AskJotCueContext context,
+  ) {
+    return _deadlineAction(query, context) ??
+        _projectAction(query, context) ??
+        _estimateAction(query, context) ??
+        _dependencyAction(query, context) ??
+        _waitingForAction(query, context);
+  }
+
+  AskJotCueAnswer? _deadlineAction(String query, AskJotCueContext context) {
+    final clearPatterns = <RegExp>[
+      RegExp(
+        r'^(?:clear|remove)\s+(?:the\s+)?deadline\s+(?:for|from)\s+(.+)$',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'^(?:clear|remove)\s+(.+?)\s+(?:due date|deadline)$',
+        caseSensitive: false,
+      ),
+    ];
+    for (final pattern in clearPatterns) {
+      final match = pattern.firstMatch(query);
+      if (match == null) continue;
+      final resolution = _resolveTask(match.group(1) ?? '', context.tasks);
+      if (resolution.task == null) {
+        return _taskResolutionAnswer(resolution, match.group(1) ?? '');
+      }
+      final task = resolution.task!;
+      if (task.dueAt == null) {
+        return AskJotCueAnswer(
+          intent: AskJotCueIntent.action,
+          title: 'No change needed',
+          text: '"${task.title}" does not have a deadline.',
+        );
+      }
+      return _taskMetadataProposal(
+        task,
+        idSuffix: 'deadline:clear',
+        update: const TaskMetadataUpdate(clearDueAt: true),
+        previewTitle: 'Clear deadline',
+        previewText: 'Remove the deadline from "${task.title}".',
+      );
+    }
+
+    final setPatterns = <RegExp>[
+      RegExp(
+        r'^(?:set|make)\s+(.+?)\s+(?:due|deadline)\s+(?:to\s+|for\s+|on\s+)?(.+)$',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'^set\s+(?:the\s+)?deadline\s+(?:of|for)\s+(.+?)\s+(?:to|for|on)\s+(.+)$',
+        caseSensitive: false,
+      ),
+    ];
+    for (final pattern in setPatterns) {
+      final match = pattern.firstMatch(query);
+      if (match == null) continue;
+      final resolution = _resolveTask(match.group(1) ?? '', context.tasks);
+      if (resolution.task == null) {
+        return _taskResolutionAnswer(resolution, match.group(1) ?? '');
+      }
+      final dueAt = _parsePlanningDueDate(match.group(2) ?? '', context.now);
+      if (dueAt == null) {
+        return const AskJotCueAnswer(
+          intent: AskJotCueIntent.action,
+          title: 'I need a clearer deadline',
+          text:
+              'Use a date like “tomorrow”, “Sep 30”, or “2026-09-30”. Nothing has changed.',
+        );
+      }
+      final task = resolution.task!;
+      if (_sameCalendarDate(task.dueAt, dueAt)) {
+        return AskJotCueAnswer(
+          intent: AskJotCueIntent.action,
+          title: 'No change needed',
+          text: '"${task.title}" is already due ${_date(dueAt)}.',
+        );
+      }
+      return _taskMetadataProposal(
+        task,
+        idSuffix: 'deadline:${dueAt.millisecondsSinceEpoch}',
+        update: TaskMetadataUpdate(dueAt: dueAt),
+        previewTitle: 'Set deadline',
+        previewText: 'Set "${task.title}" due ${_date(dueAt)}.',
+      );
+    }
+    return null;
+  }
+
+  AskJotCueAnswer? _projectAction(String query, AskJotCueContext context) {
+    final clearPatterns = <RegExp>[
+      RegExp(
+        r'^(?:remove|unassign)\s+(.+?)\s+from\s+(?:its\s+)?project$',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'^clear\s+(?:the\s+)?project\s+(?:for|from)\s+(.+)$',
+        caseSensitive: false,
+      ),
+    ];
+    for (final pattern in clearPatterns) {
+      final match = pattern.firstMatch(query);
+      if (match == null) continue;
+      final resolution = _resolveTask(match.group(1) ?? '', context.tasks);
+      if (resolution.task == null) {
+        return _taskResolutionAnswer(resolution, match.group(1) ?? '');
+      }
+      final task = resolution.task!;
+      if (task.projectId == null) {
+        return AskJotCueAnswer(
+          intent: AskJotCueIntent.action,
+          title: 'No change needed',
+          text: '"${task.title}" is not assigned to a Project.',
+        );
+      }
+      return _taskMetadataProposal(
+        task,
+        idSuffix: 'project:clear',
+        update: const TaskMetadataUpdate(clearProjectId: true),
+        previewTitle: 'Remove from project',
+        previewText: 'Remove "${task.title}" from its current Project.',
+      );
+    }
+
+    final patterns = <RegExp>[
+      RegExp(
+        r'^(?:assign|add)\s+(.+?)\s+to\s+(?:project\s+)(.+)$',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'^put\s+(.+?)\s+under\s+(?:project\s+)?(.+)$',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'^set\s+(?:the\s+)?project\s+(?:for|of)\s+(.+?)\s+to\s+(.+)$',
+        caseSensitive: false,
+      ),
+    ];
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(query);
+      if (match == null) continue;
+      final taskResolution = _resolveTask(match.group(1) ?? '', context.tasks);
+      if (taskResolution.task == null) {
+        return _taskResolutionAnswer(taskResolution, match.group(1) ?? '');
+      }
+      final projectResolution = _resolveProject(
+        match.group(2) ?? '',
+        context.projects,
+      );
+      if (projectResolution.project == null) {
+        return _projectResolutionAnswer(
+          projectResolution,
+          match.group(2) ?? '',
+        );
+      }
+      final task = taskResolution.task!;
+      final project = projectResolution.project!;
+      if (task.projectId == project.id) {
+        return AskJotCueAnswer(
+          intent: AskJotCueIntent.action,
+          title: 'No change needed',
+          text: '"${task.title}" is already in ${project.name}.',
+        );
+      }
+      return _taskMetadataProposal(
+        task,
+        idSuffix: 'project:${project.id}',
+        update: TaskMetadataUpdate(projectId: project.id),
+        previewTitle: 'Assign to project',
+        previewText: 'Assign "${task.title}" to ${project.name}.',
+      );
+    }
+    return null;
+  }
+
+  AskJotCueAnswer? _estimateAction(String query, AskJotCueContext context) {
+    final clearPatterns = <RegExp>[
+      RegExp(
+        r'^(?:clear|remove)\s+(?:the\s+)?(?:estimate|effort estimate)\s+(?:for|from)\s+(.+)$',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'^(?:clear|remove)\s+(.+?)\s+(?:estimate|effort estimate)$',
+        caseSensitive: false,
+      ),
+    ];
+    for (final pattern in clearPatterns) {
+      final match = pattern.firstMatch(query);
+      if (match == null) continue;
+      final resolution = _resolveTask(match.group(1) ?? '', context.tasks);
+      if (resolution.task == null) {
+        return _taskResolutionAnswer(resolution, match.group(1) ?? '');
+      }
+      final task = resolution.task!;
+      if (task.estimatedMinutes == null) {
+        return AskJotCueAnswer(
+          intent: AskJotCueIntent.action,
+          title: 'No change needed',
+          text: '"${task.title}" does not have an effort estimate.',
+        );
+      }
+      return _taskMetadataProposal(
+        task,
+        idSuffix: 'estimate:clear',
+        update: const TaskMetadataUpdate(clearEstimatedMinutes: true),
+        previewTitle: 'Clear effort estimate',
+        previewText: 'Remove the effort estimate from "${task.title}".',
+      );
+    }
+
+    final patterns = <RegExp>[
+      RegExp(
+        r'^set\s+(.+?)\s+(?:estimate|effort)\s+(?:to\s+)?(.+)$',
+        caseSensitive: false,
+      ),
+      RegExp(r'^estimate\s+(.+?)\s+(?:at|as)\s+(.+)$', caseSensitive: false),
+    ];
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(query);
+      if (match == null) continue;
+      final resolution = _resolveTask(match.group(1) ?? '', context.tasks);
+      if (resolution.task == null) {
+        return _taskResolutionAnswer(resolution, match.group(1) ?? '');
+      }
+      final minutes = _parseEffortMinutes(match.group(2) ?? '');
+      if (minutes == null) {
+        return const AskJotCueAnswer(
+          intent: AskJotCueIntent.action,
+          title: 'I need a clearer estimate',
+          text:
+              'Use an effort like “45 minutes”, “90 mins”, or “2 hours”. Nothing has changed.',
+        );
+      }
+      final task = resolution.task!;
+      if (task.estimatedMinutes == minutes) {
+        return AskJotCueAnswer(
+          intent: AskJotCueIntent.action,
+          title: 'No change needed',
+          text:
+              '"${task.title}" is already estimated at ${_formatMinutes(minutes)}.',
+        );
+      }
+      return _taskMetadataProposal(
+        task,
+        idSuffix: 'estimate:$minutes',
+        update: TaskMetadataUpdate(estimatedMinutes: minutes),
+        previewTitle: 'Set effort estimate',
+        previewText:
+            'Set "${task.title}" to ${_formatMinutes(minutes)} estimated effort.',
+      );
+    }
+    return null;
+  }
+
+  AskJotCueAnswer? _dependencyAction(String query, AskJotCueContext context) {
+    final patterns = <(RegExp, bool, int, int)>[
+      (
+        RegExp(r'^make\s+(.+?)\s+depend\s+on\s+(.+)$', caseSensitive: false),
+        true,
+        1,
+        2,
+      ),
+      (
+        RegExp(
+          r'^add\s+(.+?)\s+as\s+(?:a\s+)?prerequisite\s+for\s+(.+)$',
+          caseSensitive: false,
+        ),
+        true,
+        2,
+        1,
+      ),
+      (
+        RegExp(
+          r'^remove\s+(.+?)\s+as\s+(?:a\s+)?prerequisite\s+for\s+(.+)$',
+          caseSensitive: false,
+        ),
+        false,
+        2,
+        1,
+      ),
+      (
+        RegExp(
+          r'^remove\s+(?:dependency\s+)?(.+?)\s+from\s+(.+)$',
+          caseSensitive: false,
+        ),
+        false,
+        2,
+        1,
+      ),
+    ];
+
+    for (final entry in patterns) {
+      final match = entry.$1.firstMatch(query);
+      if (match == null) continue;
+      final taskResolution = _resolveTask(
+        match.group(entry.$3) ?? '',
+        context.tasks,
+      );
+      if (taskResolution.task == null) {
+        return _taskResolutionAnswer(
+          taskResolution,
+          match.group(entry.$3) ?? '',
+        );
+      }
+      final prerequisiteResolution = _resolveTask(
+        match.group(entry.$4) ?? '',
+        context.tasks,
+      );
+      if (prerequisiteResolution.task == null) {
+        return _taskResolutionAnswer(
+          prerequisiteResolution,
+          match.group(entry.$4) ?? '',
+        );
+      }
+      final task = taskResolution.task!;
+      final prerequisite = prerequisiteResolution.task!;
+      if (task.id == prerequisite.id) {
+        return const AskJotCueAnswer(
+          intent: AskJotCueIntent.action,
+          title: 'Invalid dependency',
+          text: 'A Task cannot depend on itself. Nothing has changed.',
+        );
+      }
+
+      final dependencies = <String>[...task.dependsOnTaskIds];
+      if (entry.$2) {
+        if (dependencies.contains(prerequisite.id)) {
+          return AskJotCueAnswer(
+            intent: AskJotCueIntent.action,
+            title: 'No change needed',
+            text: '"${task.title}" already depends on "${prerequisite.title}".',
+          );
+        }
+        dependencies.add(prerequisite.id);
+      } else {
+        if (!dependencies.remove(prerequisite.id)) {
+          return AskJotCueAnswer(
+            intent: AskJotCueIntent.action,
+            title: 'No change needed',
+            text: '"${task.title}" does not depend on "${prerequisite.title}".',
+          );
+        }
+      }
+
+      return _taskMetadataProposal(
+        task,
+        idSuffix:
+            'dependency:${entry.$2 ? 'add' : 'remove'}:${prerequisite.id}',
+        update: TaskMetadataUpdate(dependsOnTaskIds: dependencies),
+        previewTitle: entry.$2 ? 'Add prerequisite' : 'Remove prerequisite',
+        previewText: entry.$2
+            ? 'Make "${task.title}" depend on "${prerequisite.title}".'
+            : 'Remove "${prerequisite.title}" as a prerequisite for "${task.title}".',
+      );
+    }
+    return null;
+  }
+
+  AskJotCueAnswer? _waitingForAction(String query, AskJotCueContext context) {
+    final clearPatterns = <RegExp>[
+      RegExp(r'^clear\s+waiting\s+for\s+(.+)$', caseSensitive: false),
+      RegExp(r'^clear\s+(.+?)\s+waiting\s+for$', caseSensitive: false),
+    ];
+    for (final pattern in clearPatterns) {
+      final match = pattern.firstMatch(query);
+      if (match == null) continue;
+      final resolution = _resolveTask(match.group(1) ?? '', context.tasks);
+      if (resolution.task == null) {
+        return _taskResolutionAnswer(resolution, match.group(1) ?? '');
+      }
+      final task = resolution.task!;
+      if (task.waitingFor == null || task.waitingFor!.trim().isEmpty) {
+        return AskJotCueAnswer(
+          intent: AskJotCueIntent.action,
+          title: 'No change needed',
+          text: '"${task.title}" is not marked as waiting for anything.',
+        );
+      }
+      return _taskMetadataProposal(
+        task,
+        idSuffix: 'waiting:clear',
+        update: const TaskMetadataUpdate(clearWaitingFor: true),
+        previewTitle: 'Clear waiting for',
+        previewText: 'Clear Waiting for on "${task.title}".',
+      );
+    }
+
+    final patterns = <RegExp>[
+      RegExp(r'^set\s+(.+?)\s+waiting\s+for\s+(.+)$', caseSensitive: false),
+      RegExp(r'^(.+?)\s+is\s+waiting\s+for\s+(.+)$', caseSensitive: false),
+    ];
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(query);
+      if (match == null) continue;
+      final resolution = _resolveTask(match.group(1) ?? '', context.tasks);
+      if (resolution.task == null) {
+        return _taskResolutionAnswer(resolution, match.group(1) ?? '');
+      }
+      final waitingFor = (match.group(2) ?? '').trim();
+      if (waitingFor.isEmpty || waitingFor.length > 200) {
+        return const AskJotCueAnswer(
+          intent: AskJotCueIntent.action,
+          title: 'I need a clearer blocker',
+          text:
+              'Waiting for must be short, explicit text. Nothing has changed.',
+        );
+      }
+      final task = resolution.task!;
+      if (_normalize(task.waitingFor ?? '') == _normalize(waitingFor)) {
+        return AskJotCueAnswer(
+          intent: AskJotCueIntent.action,
+          title: 'No change needed',
+          text: '"${task.title}" is already waiting for $waitingFor.',
+        );
+      }
+      return _taskMetadataProposal(
+        task,
+        idSuffix: 'waiting:${waitingFor.hashCode}',
+        update: TaskMetadataUpdate(waitingFor: waitingFor),
+        previewTitle: 'Set waiting for',
+        previewText: 'Mark "${task.title}" as waiting for $waitingFor.',
+      );
+    }
+    return null;
+  }
+
+  AskJotCueAnswer _taskMetadataProposal(
+    Task task, {
+    required String idSuffix,
+    required TaskMetadataUpdate update,
+    required String previewTitle,
+    required String previewText,
+  }) {
+    return AskJotCueAnswer(
+      intent: AskJotCueIntent.action,
+      title: 'Action preview',
+      text:
+          'I understand this as a Task planning change. Nothing has changed yet.',
+      actionProposal: AskJotCueActionProposal(
+        id: 'metadata:${task.id}:$idSuffix',
+        kind: AskJotCueActionKind.taskMetadata,
+        userId: task.userId,
+        taskId: task.id,
+        taskTitle: task.title,
+        sourceNoteId: task.sourceNoteId,
+        metadataUpdate: update,
+        previewTitle: previewTitle,
+        previewText: previewText,
+      ),
+    );
+  }
+
+  AskJotCueAnswer _projectResolutionAnswer(
+    _ProjectResolution resolution,
+    String candidate,
+  ) {
+    if (resolution.ambiguous) {
+      return AskJotCueAnswer(
+        intent: AskJotCueIntent.action,
+        title: 'Project name is ambiguous',
+        text:
+            'More than one Project matches “${candidate.trim()}”. Use the full Project name so JotCue does not guess.',
+      );
+    }
+    return AskJotCueAnswer(
+      intent: AskJotCueIntent.action,
+      title: 'Project not found',
+      text:
+          'I could not find a current Project matching “${candidate.trim()}”. Nothing has changed.',
+    );
   }
 
   AskJotCueAnswer? _scheduleMoveAction(String query, AskJotCueContext context) {
@@ -836,6 +1315,11 @@ class AskJotCueEngine {
           '• Which projects are active?\n'
           '• Mark Revise chapter 4 done\n'
           '• Set Revise chapter 4 priority high\n'
+          '• Set Revise chapter 4 due Sep 30\n'
+          '• Put Revise chapter 4 under Thesis\n'
+          '• Set Revise chapter 4 estimate to 90 minutes\n'
+          '• Make Submit application depend on Finish CV\n'
+          '• Application is waiting for Susan\n'
           '• Move Revise chapter 4 tomorrow at 15:00\n'
           '• Add task Submit HPC report by Sep 30\n'
           '• Create project called STG App with deadline Oct 30\n'
@@ -848,7 +1332,7 @@ class AskJotCueEngine {
       intent: AskJotCueIntent.unknown,
       title: 'I can help with your plan',
       text:
-          'I don’t safely understand that request yet. Ask about focus, deadlines, overdue work, capacity, schedules, projects, or review items. I can also preview explicit changes including Task completion, Task priority, moving one accepted JotCue block, and creating Tasks, Projects, or Notes. Unsupported requests never change anything.',
+          'I don’t safely understand that request yet. Ask about focus, deadlines, overdue work, capacity, schedules, projects, or review items. I can also preview explicit changes including Task completion, Task planning metadata, moving one accepted JotCue block, and creating Tasks, Projects, or Notes. Unsupported requests never change anything.',
     );
   }
 }
@@ -879,6 +1363,135 @@ _TaskResolution _resolveTask(String candidate, List<Task> tasks) {
   if (partial.length == 1) return _TaskResolution(task: partial.single);
   if (partial.length > 1) return const _TaskResolution(ambiguous: true);
   return const _TaskResolution();
+}
+
+class _ProjectResolution {
+  const _ProjectResolution({this.project, this.ambiguous = false});
+
+  final Project? project;
+  final bool ambiguous;
+}
+
+_ProjectResolution _resolveProject(String candidate, List<Project> projects) {
+  final needle = _normalize(candidate);
+  if (needle.isEmpty) return const _ProjectResolution();
+
+  final exact = projects
+      .where((project) => _normalize(project.name) == needle)
+      .toList(growable: false);
+  if (exact.length == 1) return _ProjectResolution(project: exact.single);
+  if (exact.length > 1) return const _ProjectResolution(ambiguous: true);
+
+  final partial = projects
+      .where((project) {
+        final name = _normalize(project.name);
+        return name.contains(needle) || needle.contains(name);
+      })
+      .toList(growable: false);
+  if (partial.length == 1) return _ProjectResolution(project: partial.single);
+  if (partial.length > 1) return const _ProjectResolution(ambiguous: true);
+  return const _ProjectResolution();
+}
+
+DateTime? _parsePlanningDueDate(String value, DateTime now) {
+  final normalized = value.trim().toLowerCase().replaceAll(',', '');
+  if (normalized == 'today') {
+    return DateTime(now.year, now.month, now.day, 23, 59);
+  }
+  if (normalized == 'tomorrow') {
+    final tomorrow = now.add(const Duration(days: 1));
+    return DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 23, 59);
+  }
+
+  final iso = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})$').firstMatch(normalized);
+  if (iso != null) {
+    final year = int.tryParse(iso.group(1)!);
+    final month = int.tryParse(iso.group(2)!);
+    final day = int.tryParse(iso.group(3)!);
+    return _validEndOfDay(year, month, day);
+  }
+
+  final monthFirst = RegExp(
+    r'^([a-z]+)\s+(\d{1,2})(?:\s+(\d{4}))?$',
+  ).firstMatch(normalized);
+  if (monthFirst != null) {
+    final month = _monthNumber(monthFirst.group(1)!);
+    final day = int.tryParse(monthFirst.group(2)!);
+    final explicitYear = int.tryParse(monthFirst.group(3) ?? '');
+    if (month == null || day == null) return null;
+    var year = explicitYear ?? now.year;
+    var parsed = _validEndOfDay(year, month, day);
+    if (parsed == null) return null;
+    if (explicitYear == null && parsed.isBefore(now)) {
+      year += 1;
+      parsed = _validEndOfDay(year, month, day);
+    }
+    return parsed;
+  }
+
+  final dayFirst = RegExp(
+    r'^(\d{1,2})\s+([a-z]+)(?:\s+(\d{4}))?$',
+  ).firstMatch(normalized);
+  if (dayFirst != null) {
+    final day = int.tryParse(dayFirst.group(1)!);
+    final month = _monthNumber(dayFirst.group(2)!);
+    final explicitYear = int.tryParse(dayFirst.group(3) ?? '');
+    if (month == null || day == null) return null;
+    var year = explicitYear ?? now.year;
+    var parsed = _validEndOfDay(year, month, day);
+    if (parsed == null) return null;
+    if (explicitYear == null && parsed.isBefore(now)) {
+      year += 1;
+      parsed = _validEndOfDay(year, month, day);
+    }
+    return parsed;
+  }
+  return null;
+}
+
+DateTime? _validEndOfDay(int? year, int? month, int? day) {
+  if (year == null || month == null || day == null) return null;
+  final value = DateTime(year, month, day, 23, 59);
+  if (value.year != year || value.month != month || value.day != day) {
+    return null;
+  }
+  return value;
+}
+
+int? _monthNumber(String value) {
+  return switch (value.toLowerCase()) {
+    'jan' || 'january' => 1,
+    'feb' || 'february' => 2,
+    'mar' || 'march' => 3,
+    'apr' || 'april' => 4,
+    'may' => 5,
+    'jun' || 'june' => 6,
+    'jul' || 'july' => 7,
+    'aug' || 'august' => 8,
+    'sep' || 'sept' || 'september' => 9,
+    'oct' || 'october' => 10,
+    'nov' || 'november' => 11,
+    'dec' || 'december' => 12,
+    _ => null,
+  };
+}
+
+int? _parseEffortMinutes(String value) {
+  final match = RegExp(
+    r'^(\d+(?:\.\d+)?)\s*(minutes?|mins?|hours?|hrs?|h|m)$',
+    caseSensitive: false,
+  ).firstMatch(value.trim());
+  if (match == null) return null;
+  final amount = double.tryParse(match.group(1)!);
+  if (amount == null || amount <= 0) return null;
+  final unit = match.group(2)!.toLowerCase();
+  final minutes = unit.startsWith('h') ? (amount * 60).round() : amount.round();
+  if (minutes <= 0 || minutes > 10080) return null;
+  return minutes;
+}
+
+bool _sameCalendarDate(DateTime? a, DateTime b) {
+  return a != null && a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
 PriorityLevel _priorityFromWord(String? value) {
